@@ -96,7 +96,30 @@ export default function Earn() {
           </div>
         </div>
 
-        {/* Recent Activity */}
+   {/* New Company card */}
+<div className="overflow-hidden rounded-2xl border border-loot-border bg-gradient-to-br from-loot-card to-loot-dark p-4">
+  <div className="mb-4 flex items-center gap-3">
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-loot-orange/15">
+      <Sparkles className="h-6 w-6 text-loot-orange" />
+    </div>
+    <div>
+      <h3 className="font-display text-base font-bold text-white">OfferToro</h3>
+      <p className="text-xs text-gray-400">Complete offers to earn cash</p>
+    </div>
+  </div>
+  <a
+    href="https://offertoro.com"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="flex w-full items-center justify-center gap-2 rounded-xl bg-loot-orange py-3.5 font-bold text-black"
+  >
+    <ExternalLink className="h-5 w-5" />
+    Open Offers
+  </a>
+  <p className="mt-3 text-center text-[11px] leading-relaxed text-gray-600">
+    Offers provided by OfferToro
+  </p>
+</div>     {/* Recent Activity */}
         {recentActivity.length > 0 && (
           <div className="mb-6 rounded-2xl border border-loot-border bg-loot-card p-5">
             <div className="mb-4 flex items-center gap-2">
