@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase';
 const AppContext = createContext<any>(null);
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
-  // قراءة المستخدم والصفحة من ذاكرة المتصفح
   const [user, setUser] = useState<any>(() => {
     const saved = localStorage.getItem('loot_user');
     return saved ? JSON.parse(saved) : null;
@@ -17,7 +16,29 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   
   const [postbacks, setPostbacks] = useState([]);
 
-  // حفظ المستخدم والصفحة كل ما يتغيروا
+  // جلب بيانات المستخدم كاملة (مع الرتبة) من السيرفر
+  useEffect(() => {
+    if (!user?.email) return;
+
+    const fetchFullUserData = async () => {
+      const { data } = await supabase
+        .from('app_users')
+        .select('*') // هنا نطلب كل شي (الرصيد والرتبة)
+        .eq('email', user.email)
+        .single();
+      
+      if (data) {
+        setUser(data); 
+        localStorage.setItem('loot_user', JSON.stringify(data));
+      }
+    };
+
+    fetchFullUserData(); // نجيبها أول ما يفتح الموقع
+
+    const interval = setInterval(fetchFullUserData, 5000); // ونجيبها كل 5 ثواني
+    return () => clearInterval(interval);
+  }, [user?.email]);
+
   useEffect(() => {
     if (user) localStorage.setItem('loot_user', JSON.stringify(user));
     else localStorage.removeItem('loot_user');
@@ -42,7 +63,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signup = async (username: string, email: string, password: string) => {
-    const { data } = await supabase.from('app_users').insert([{ username, email, password, balance: 0 }]).select().single();
+    const { data } = await supabase.from('app_users').insert([{ username, email, password, balance: 0, role: 'user' }]).select().single();
     if (data) {
       setUser(data);
       navigate('earn');
