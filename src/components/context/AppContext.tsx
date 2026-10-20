@@ -1,36 +1,37 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient'; // تأكد أن المسار صحيح
+import { supabase } from '../supabaseClient';
 
-// 1. تعريف أنواع البيانات (Types)
 export interface User {
-  username: string;
+  id: string;
   email: string;
+  password?: string;
   balance: number;
-  createdAt: string;
 }
 
 export interface Withdrawal {
   id: string;
   username: string;
   email: string;
-  amount: number;          // in Cash
-  method: string;          // e.g. "Binance"
-  walletAddress: string;   // Binance wallet address
+  amount: number;
+  method: string;
+  walletAddress: string;
   status: 'pending' | 'paid' | 'rejected';
-  requestedAt: string;     // ISO timestamp
+  requestedAt: string;
   processedAt: string | null;
 }
 
-// 2. إنشاء الـ Context
 const AppContext = createContext<any>(null);
 
-// 3. إنشاء المزود (Provider)
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<any>(null);
+  
+  const [user, setUser] = useState<any>(() => {
+    const savedUser = localStorage.getItem('lootearn_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  
   const [page, setPage] = useState('home');
   const [postbacks, setPostbacks] = useState([]);
 
-  // 4. كود التحديث الفوري (Realtime) من Supabase
   useEffect(() => {
     const subscription = supabase
       .channel('custom-all-channel')
@@ -38,12 +39,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'app_users' },
         (payload) => {
-          console.log('تم استلام تحديث من السيرفر:', payload.new);
-          
           setUser((prevUser: any) => {
-            // تحديث الرصيد فقط إذا كان التحديث يخص المستخدم الحالي
             if (prevUser && prevUser.email === payload.new.email) {
-              return { ...prevUser, balance: payload.new.balance };
+              const updatedUser = { ...prevUser, balance: payload.new.balance };
+              localStorage.setItem('lootearn_user', JSON.stringify(updatedUser));
+              return updatedUser;
             }
             return prevUser;
           });
@@ -51,25 +51,28 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       )
       .subscribe();
 
-    // تنظيف الاتصال عند إغلاق التطبيق
     return () => {
       supabase.removeChannel(subscription);
     };
   }, []);
 
-  // دالة التنقل بين الصفحات
   const navigate = (path: string) => {
     setPage(path);
   };
 
+  const logout = () => {
+    localStorage.removeItem('lootearn_user');
+    setUser(null);
+    navigate('home');
+  };
+
   return (
-    <AppContext.Provider value={{ user, setUser, page, setPage, navigate, postbacks, setPostbacks }}>
+    <AppContext.Provider value={{ user, setUser, page, setPage, navigate, postbacks, setPostbacks, logout }}>
       {children}
     </AppContext.Provider>
   );
 };
 
-// 5. تصدير هوك مخصص لاستخدام الـ Context بسهولة
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
