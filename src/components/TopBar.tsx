@@ -6,7 +6,7 @@ export default function TopBar() {
   // هذي هي الأرقام اللي طلبتها (مرتبة)
   const withdrawals = [
     { name: 'usdt', amount: 'LE 100.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 200.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 300.00', icon: 'B' },
     { name: 'usdt', amount: 'LE 500.00', icon: 'B' },
     { name: 'usdt', amount: 'LE 1000.00', icon: 'B' },
     { name: 'usdt', amount: 'LE 2000.00', icon: 'B' },
