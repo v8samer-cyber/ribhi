@@ -4,74 +4,48 @@ import { supabase } from '@/lib/supabase';
 const AppContext = createContext<any>(null);
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
-  // 1. نقرأ المستخدم من ذاكرة المتصفح أول ما يفتح الموقع
+  // 1. استرجاع البيانات من الذاكرة المخزنة (عشان ما ترجع للبداية لما ترفرش)
   const [user, setUser] = useState<any>(() => {
     const saved = localStorage.getItem('loot_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  const [page, setPage] = useState(() => {
+    const savedPage = localStorage.getItem('loot_page');
+    return savedPage ? savedPage : 'home';
+  });
   
-  const [page, setPage] = useState('home');
   const [postbacks, setPostbacks] = useState([]);
 
-  // 2. كل ما يتغير المستخدم (تسجيل دخول أو خروج)، نحدث ذاكرة المتصفح
+  // 2. حفظ المستخدم والصفحة كل ما يتغيروا
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('loot_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('loot_user');
-    }
+    if (user) localStorage.setItem('loot_user', JSON.stringify(user));
+    else localStorage.removeItem('loot_user');
   }, [user]);
 
-  // الاستماع لتحديثات الرصيد من قاعدة البيانات (Real-time)
   useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'app_users', filter: `email=eq.${user.email}` },
-        (payload) => {
-          console.log('Balance updated from server!', payload.new);
-          setUser((prev: any) => ({ ...prev, balance: payload.new.balance }));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.email]);
+    localStorage.setItem('loot_page', page);
+  }, [page]);
 
   const navigate = (path: string) => {
     setPage(path);
   };
 
   const login = async (email: string, password: string) => {
-    const { data, error } = await supabase
-      .from('app_users')
-      .select('*')
-      .eq('email', email)
-      .single();
-      
+    const { data, error } = await supabase.from('app_users').select('*').eq('email', email).single();
     if (data) {
-      setUser(data); // هنا راح تنحفظ البيانات أوتوماتيك بفضل الـ useEffect
-      setPage('earn');
+      setUser(data);
+      navigate('earn');
       return true;
     }
     return false;
   };
 
   const signup = async (username: string, email: string, password: string) => {
-    const { data, error } = await supabase
-      .from('app_users')
-      .insert([{ username, email, password, balance: 0 }])
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('app_users').insert([{ username, email, password, balance: 0 }]).select().single();
     if (data) {
-      setUser(data); // هنا راح تنحفظ البيانات أوتوماتيك بفضل الـ useEffect
-      setPage('earn');
+      setUser(data);
+      navigate('earn');
       return true;
     }
     return false;
