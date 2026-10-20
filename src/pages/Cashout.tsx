@@ -1,125 +1,107 @@
 ﻿import { useState } from 'react';
-import { useApp } from '../context/AppContext';
-import { supabase } from '../supabaseClient';
+import { useApp } from '@/context/AppContext';
+import { supabase } from '@/lib/supabase';
 
 export default function Cashout() {
-  const { user, setUser, navigate } = useApp();
+  const { user, setUser } = useApp();
   const [wallet, setWallet] = useState('');
+  const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const MIN_WITHDRAWAL = 100; 
+  const currentBalance = user?.balance || 0;
+  const minWithdrawCash = 1000; 
+  const canWithdraw = currentBalance >= Number(amount) && Number(amount) >= minWithdrawCash;
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!user) {
-      alert("يجب تسجيل الدخول أولاً");
-      navigate('signin');
-      return;
-    }
-
-    if (user.balance < MIN_WITHDRAWAL) {
-      alert(`الحد الأدنى للسحب هو ${MIN_WITHDRAWAL} نقطة. رصيدك لا يكفي.`);
-      return;
-    }
-
-    if (!wallet.trim()) {
-      alert("يرجى إدخال إيميل أو حساب Binance");
-      return;
-    }
+    if (!canWithdraw || !user) return;
 
     setLoading(true);
 
-    const withdrawAmount = MIN_WITHDRAWAL; 
-    const newBalance = user.balance - withdrawAmount;
+    try {
+      // 1. تسجيل السحب في جدول السحوبات
+      const { error: withdrawError } = await supabase
+        .from('withdrawals')
+        .insert([{
+          user_id: user.id,
+          amount: Number(amount),
+          wallet_address: wallet,
+          status: 'pending'
+        }]);
 
-    const { error: updateError } = await supabase
-      .from('app_users')
-      .update({ balance: newBalance })
-      .eq('id', user.id);
+      if (withdrawError) throw withdrawError;
 
-    if (updateError) {
-      alert("حدث خطأ أثناء خصم الرصيد: " + updateError.message);
+      // 2. خصم المبلغ من رصيد المستخدم
+      const newBalance = currentBalance - Number(amount);
+      const { error: updateError } = await supabase
+        .from('app_users')
+        .update({ balance: newBalance })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      // 3. تحديث الواجهة
+      setUser({ ...user, balance: newBalance });
+      setAmount('');
+      setWallet('');
+      alert(`Withdrawal request of ${amount} LE to Binance submitted successfully!`);
+
+    } catch (error) {
+      console.error(error);
+      alert('Failed to process withdrawal. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const { error: insertError } = await supabase
-      .from('withdrawals')
-      .insert([{
-        user_id: user.id,
-        email: user.email,
-        amount: withdrawAmount / 1000,
-        wallet_address: wallet,
-        status: 'pending'
-      }]);
-
-    if (insertError) {
-      alert("حدث خطأ أثناء تسجيل الطلب: " + insertError.message);
-      setLoading(false);
-      return;
-    }
-
-    const updatedUser = { ...user, balance: newBalance };
-    setUser(updatedUser);
-    localStorage.setItem('lootearn_user', JSON.stringify(updatedUser));
-
-    alert(`تم تقديم طلب السحب بنجاح! سيتم تحويل 0.10 دولار إلى حسابك.`);
-    setWallet('');
-    setLoading(false);
   };
 
-  if (!user) {
-    return <div className="text-white text-center mt-20">Please Sign In first.</div>;
-  }
-
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center pt-10 pb-28 px-4 text-white">
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-6 pb-24">
+      <h1 className="text-2xl font-bold mb-6 mt-2">Cashout</h1>
       
-      {/* العنوان أصبح أبيض بدون أي كلام برتقالي تحته */}
-      <h1 className="text-3xl font-bold text-white mb-6">Withdraw Funds</h1>
+      <div className="bg-[#161616] p-6 rounded-2xl border border-gray-800 text-center mb-6">
+        <p className="text-gray-400 mb-2">Available Balance</p>
+        <p className="text-4xl font-bold text-orange-500">{currentBalance} LE</p>
+        <p className="text-gray-400 text-sm mt-2">Every 1000 Cash = $1.00 USD</p>
+      </div>
 
-      <div className="bg-[#1e293b] p-6 rounded-xl w-full max-w-sm border border-gray-700 relative z-50">
+      <form onSubmit={handleWithdraw} className="bg-[#161616] p-6 rounded-2xl border border-gray-800 space-y-4">
+        <h2 className="text-lg font-bold mb-2">Withdraw to Binance</h2>
         
-        {/* هنا: الرصيد الأخضر، وبجانبه مباشرة عبارة الحد الأدنى */}
-        <div className="mb-8 text-center flex flex-col items-center">
-          <p className="text-gray-400 text-sm mb-2">Your Balance</p>
-          <div className="flex items-center gap-3">
-             <p className="text-3xl font-bold text-green-400">${(user.balance / 1000).toFixed(2)}</p>
-             <span className="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-600">
-               Min: 100 Pts
-             </span>
-          </div>
-          <p className="text-gray-500 text-xs mt-2">({user.balance} Points)</p>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Binance Wallet Address (BEP20)</label>
+          <input 
+            type="text" 
+            value={wallet} 
+            onChange={(e) => setWallet(e.target.value)} 
+            required 
+            className="w-full bg-black border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-orange-500" 
+            placeholder="Enter your Binance address" 
+          />
         </div>
 
-        <form onSubmit={handleWithdraw} className="space-y-6 relative z-50">
-          <div>
-            {/* خانة الإيميل أصبحت نظيفة وواضحة */}
-            <label className="block text-sm font-medium text-gray-300 mb-2">Binance Account / Email</label>
-            <input 
-              type="text" 
-              value={wallet} 
-              onChange={(e) => setWallet(e.target.value)} 
-              placeholder="Enter your Binance email or wallet"
-              className="w-full p-3 rounded-lg bg-black text-white border border-gray-600 focus:outline-none focus:border-blue-500 relative z-50"
-              required 
-            />
-          </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Amount (Min 1000 LE)</label>
+          <input 
+            type="number" 
+            value={amount} 
+            onChange={(e) => setAmount(e.target.value)} 
+            required 
+            min={minWithdrawCash}
+            className="w-full bg-black border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-orange-500" 
+            placeholder="1000" 
+          />
+        </div>
 
-          <button 
-            type="submit" 
-            disabled={loading || user.balance < MIN_WITHDRAWAL} 
-            className={`w-full p-3 rounded-lg font-bold transition relative z-50 ${
-              user.balance < MIN_WITHDRAWAL 
-                ? 'bg-gray-600 cursor-not-allowed text-gray-400' 
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-          >
-            {loading ? 'Processing...' : user.balance < MIN_WITHDRAWAL ? 'Not Enough Balance' : 'Request Withdrawal'}
-          </button>
-        </form>
-      </div>
+        <button 
+          type="submit" 
+          disabled={!canWithdraw || loading}
+          className={`w-full font-bold py-3 rounded-xl mt-2 transition ${
+            !canWithdraw || loading ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-orange-500 text-white hover:bg-orange-600'
+          }`}
+        >
+          {loading ? 'Processing...' : canWithdraw ? 'Request Withdrawal' : 'Insufficient Balance'}
+        </button>
+      </form>
     </div>
   );
 }
