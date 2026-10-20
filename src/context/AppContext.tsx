@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient'; // تأكد أن المسار صحيح
+import { supabase } from '../supabaseClient';
 
-// 1. تعريف أنواع البيانات
 export interface User {
   id: string;
   email: string;
@@ -21,13 +20,10 @@ export interface Withdrawal {
   processedAt: string | null;
 }
 
-// 2. إنشاء الـ Context
 const AppContext = createContext<any>(null);
 
-// 3. إنشاء المزود (Provider)
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   
-  // جلب المستخدم من الذاكرة المحلية (localStorage) عند فتح الموقع
   const [user, setUser] = useState<any>(() => {
     const savedUser = localStorage.getItem('lootearn_user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -36,7 +32,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [page, setPage] = useState('home');
   const [postbacks, setPostbacks] = useState([]);
 
-  // 4. كود التحديث الفوري (Realtime) من Supabase
   useEffect(() => {
     const subscription = supabase
       .channel('custom-all-channel')
@@ -44,12 +39,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'app_users' },
         (payload) => {
-          console.log('تم استلام تحديث من السيرفر:', payload.new);
-          
           setUser((prevUser: any) => {
             if (prevUser && prevUser.email === payload.new.email) {
               const updatedUser = { ...prevUser, balance: payload.new.balance };
-              // حفظ الرصيد الجديد في المتصفح لكي لا يختفي
               localStorage.setItem('lootearn_user', JSON.stringify(updatedUser));
               return updatedUser;
             }
@@ -64,12 +56,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  // دالة التنقل بين الصفحات
   const navigate = (path: string) => {
     setPage(path);
   };
 
-  // دالة تسجيل الخروج (يمكنك استدعاؤها من أي مكان)
   const logout = () => {
     localStorage.removeItem('lootearn_user');
     setUser(null);
@@ -83,7 +73,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// 5. تصدير الهوك
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
