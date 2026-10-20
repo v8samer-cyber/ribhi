@@ -1,14 +1,16 @@
 ﻿import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { Target, Coins, Wallet, LogOut } from 'lucide-react';
+import { LogOut, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function Profile() {
   const { user, setUser, navigate } = useApp();
+  const [activeTab, setActiveTab] = useState<'offers' | 'surveys' | 'cashout'>('offers');
   const [offers, setOffers] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // جلب البيانات الحقيقية من قاعدة البيانات
+  // جلب البيانات الحقيقية
   useEffect(() => {
     if (!user) return;
 
@@ -42,88 +44,147 @@ export default function Profile() {
     navigate('home');
   };
 
+  const toggleExpand = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
+  };
+
   const username = user?.email ? user.email.split('@')[0] : 'User';
+
+  // دالة لجلب أول حرف من اسم الشركة كأيقونة
+  const getIconLetter = (provider: string) => {
+    if (!provider) return 'O';
+    return provider.charAt(0).toUpperCase();
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-24">
-      <h1 className="text-2xl font-bold mb-6 mt-2">Profile</h1>
-      
       {/* كرت المستخدم */}
       <div className="bg-[#161616] p-6 rounded-3xl border border-gray-800 flex flex-col items-center mb-6">
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-orange-500 to-red-500 p-1 mb-4">
-          <div className="w-full h-full bg-[#161616] rounded-full flex items-center justify-center text-4xl font-bold text-orange-500">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500 to-red-500 p-1 mb-4">
+          <div className="w-full h-full bg-[#161616] rounded-full flex items-center justify-center text-3xl font-bold text-orange-500">
             {username.charAt(0).toUpperCase()}
           </div>
         </div>
         <h2 className="text-xl font-bold">{username}</h2>
-        <p className="text-gray-400 text-sm mb-4">{user?.email}</p>
+        <p className="text-gray-400 text-sm">{user?.email}</p>
       </div>
 
-      {/* الإحصائيات */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="bg-[#161616] p-4 rounded-2xl border border-gray-800">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-gray-400 text-xs font-medium">Offer Completed</span>
-            <Target className="h-4 w-4 text-red-500" />
-          </div>
-          <p className="text-xl font-bold">{offers.length}</p>
-        </div>
-
-        <div className="bg-[#161616] p-4 rounded-2xl border border-gray-800">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-gray-400 text-xs font-medium">Current Balance</span>
-            <Coins className="h-4 w-4 text-yellow-500" />
-          </div>
-          <p className="text-xl font-bold text-orange-500">{Number(user?.balance || 0).toFixed(2)} LE</p>
-        </div>
+      {/* التبويبات */}
+      <div className="flex justify-around bg-[#161616] rounded-xl p-1 mb-6 border border-gray-800">
+        {['offers', 'surveys', 'cashout'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab as any)}
+            className={`flex-1 py-2 text-sm font-bold capitalize rounded-lg transition ${
+              activeTab === tab ? 'bg-orange-500 text-white' : 'text-gray-400'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
 
-      {/* سجل العروض */}
-      <div className="bg-[#161616] p-5 rounded-2xl border border-gray-800 mb-6">
-        <h2 className="text-lg font-bold mb-4">Offer History</h2>
-        {offers.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center">No offers completed yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {offers.map((offer) => (
-              <div key={offer.id} className="flex justify-between items-center bg-black p-3 rounded-xl border border-gray-800">
-                <div>
-                  <p className="font-bold text-sm">{offer.provider || 'Offer'}</p>
-                  <p className="text-xs text-gray-500">{new Date(offer.created_at).toLocaleString()}</p>
+      {/* محتوى التبويبات */}
+      <div className="space-y-3">
+        
+        {/* تبويب العروض */}
+        {activeTab === 'offers' && (
+          offers.length === 0 ? (
+            <p className="text-center text-gray-500 mt-10">No offers completed yet.</p>
+          ) : (
+            offers.map((offer) => (
+              <div key={offer.id} className="bg-[#161616] border border-gray-800 rounded-2xl overflow-hidden transition-all">
+                <div 
+                  onClick={() => toggleExpand(offer.id)}
+                  className="p-4 flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-600 to-red-600 flex items-center justify-center text-xl font-bold">
+                      {getIconLetter(offer.provider)}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">{offer.provider || 'Offer'}</p>
+                      <p className="text-xs text-gray-400">{offer.status}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-orange-500">{offer.amount} LE</span>
+                    {expandedId === offer.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
                 </div>
-                <span className="text-green-500 font-bold">+{offer.amount} LE</span>
+                
+                {/* التفاصيل */}
+                {expandedId === offer.id && (
+                  <div className="px-4 pb-4 border-t border-gray-800 pt-3 text-sm">
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Transaction ID</span>
+                      <span className="font-mono text-xs">{offer.transaction_id || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Date</span>
+                      <span>{new Date(offer.created_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            ))
+          )
+        )}
+
+        {/* تبويب الاستبيانات (فاضي حالياً) */}
+        {activeTab === 'surveys' && (
+          <p className="text-center text-gray-500 mt-10">No surveys available at the moment.</p>
+        )}
+
+        {/* تبويب السحوبات */}
+        {activeTab === 'cashout' && (
+          withdrawals.length === 0 ? (
+            <p className="text-center text-gray-500 mt-10">No withdrawals yet.</p>
+          ) : (
+            withdrawals.map((w) => (
+              <div key={w.id} className="bg-[#161616] border border-gray-800 rounded-2xl overflow-hidden transition-all">
+                <div 
+                  onClick={() => toggleExpand(w.id)}
+                  className="p-4 flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-xl font-bold">
+                      B
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Binance</p>
+                      <p className="text-xs text-gray-400">Cashout</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-orange-500">{w.amount} LE</span>
+                    {expandedId === w.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                </div>
+                
+                {/* التفاصيل */}
+                {expandedId === w.id && (
+                  <div className="px-4 pb-4 border-t border-gray-800 pt-3 text-sm">
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Status</span>
+                      <span className="text-yellow-500 uppercase">{w.status}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Date</span>
+                      <span>{new Date(w.created_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          )
         )}
       </div>
 
-      {/* سجل السحوبات */}
-      <div className="bg-[#161616] p-5 rounded-2xl border border-gray-800 mb-6">
-        <h2 className="text-lg font-bold mb-4">Withdrawal History</h2>
-        {withdrawals.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center">No withdrawals yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {withdrawals.map((w) => (
-              <div key={w.id} className="flex justify-between items-center bg-black p-3 rounded-xl border border-gray-800">
-                <div>
-                  <p className="font-bold text-sm">Binance Withdrawal</p>
-                  <p className="text-xs text-gray-500">{new Date(w.created_at).toLocaleString()}</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-red-500 font-bold block">-{w.amount} LE</span>
-                  <span className="text-[10px] text-yellow-500 uppercase">{w.status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
+      {/* زر الخروج */}
       <button 
         onClick={handleLogout} 
-        className="w-full bg-[#161616] border border-red-500/30 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-500/10 transition flex items-center justify-center gap-2"
+        className="mt-8 w-full bg-[#161616] border border-red-500/30 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-500/10 transition flex items-center justify-center gap-2"
       >
         <LogOut className="h-5 w-5" />
         Logout
