@@ -3,23 +3,19 @@ import { useApp } from '@/context/AppContext';
 export default function TopBar() {
   const { user } = useApp();
   
-  // أضفنا طلبات كثيرة عشان الشريط يبين حي ومتحرك
+  // هذي هي الأرقام اللي طلبتها (مرتبة)
   const withdrawals = [
-    { name: 'usdt', amount: 'LE 97.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 338.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 150.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 45.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 100.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 200.00', icon: 'B' },
     { name: 'usdt', amount: 'LE 500.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 12.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 1000.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 2000.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 300.00', icon: 'B' },
     { name: 'usdt', amount: 'LE 800.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 210.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 65.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 420.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 105.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 900.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 400.00', icon: 'B' },
   ];
 
-  // نكرر المصفوفة مرتين عشان الحركة تكون مستمرة بدون أي فراغ
+  // نكرر المصفوفة عشان الحركة تكون مستمرة
   const tickerItems = [...withdrawals, ...withdrawals];
 
   return (
@@ -53,12 +49,10 @@ export default function TopBar() {
         <div className="flex gap-2 w-max animate-marquee">
           {tickerItems.map((item, index) => (
             <div key={index} className="flex items-center gap-3 bg-[#1a1a1a] p-2 rounded-xl border border-gray-800 min-w-[140px]">
-              {/* غيرنا اللون للأصفر لأن الباينص لونه أصفر */}
               <div className="bg-yellow-500 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg text-black">
                 {item.icon}
               </div>
               <div>
-                {/* هنا غيرنا الاسم إلى Binance */}
                 <p className="text-[10px] text-gray-400 leading-tight">Binance</p>
                 <p className="text-xs font-bold text-white">{item.name} <span className="text-red-500 ml-1">{item.amount}</span></p>
               </div>
