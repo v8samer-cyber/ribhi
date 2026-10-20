@@ -4,7 +4,7 @@ import BottomNav from '@/components/BottomNav';
 import Home from '@/pages/Home';
 import SignIn from '@/pages/SignIn';
 import SignUp from '@/pages/SignUp';
-import { Earn } from '@/pages/Earn';
+import Earn from '@/pages/Earn';
 import Cashout from '@/pages/Cashout';
 import Leaderboard from '@/pages/Leaderboard';
 import Affiliates from '@/pages/Affiliates';
