@@ -1,43 +1,69 @@
-import { useApp } from '../context/AppContext';
-import { User } from 'lucide-react'; // تأكد من وجود مكتبة الأيقونات
+import { useApp } from '@/context/AppContext';
 
 export default function TopBar() {
   const { user } = useApp();
+  
+  // أضفنا طلبات كثيرة عشان الشريط يبين حي ومتحرك
+  const withdrawals = [
+    { name: 'usdt', amount: 'LE 97.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 338.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 150.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 45.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 500.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 12.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 800.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 210.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 65.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 420.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 105.00', icon: 'B' },
+    { name: 'usdt', amount: 'LE 900.00', icon: 'B' },
+  ];
+
+  // نكرر المصفوفة مرتين عشان الحركة تكون مستمرة بدون أي فراغ
+  const tickerItems = [...withdrawals, ...withdrawals];
 
   return (
-    <div className="bg-[#0f172a] text-white w-full">
-      {/* الشريط العلوي */}
-      <div className="flex justify-between items-center px-4 py-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-orange-500 tracking-wide">LOOTEARN</h1>
-          <span className="text-gray-400">•</span>
-          {/* هنا قمنا بقسمة الرصيد على 1000 ووضع علامة الدولار */}
-          <span className="text-orange-400 font-bold">
-            ${((user?.balance || 0) / 1000).toFixed(2)}
+    <div className="bg-[#0a0a0a] text-white pb-3 border-b border-gray-800">
+      <div className="flex justify-between items-center p-4">
+        <div className="flex items-center gap-1">
+          <span className="text-xl font-black text-orange-500 tracking-tighter">
+            LOOT<span className="text-white">EARN</span>
           </span>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-300">Lv.0</span>
-          <div className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center bg-gray-800 text-gray-400">
-             <User size={16} />
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-[#1a1a1a] px-3 py-1.5 rounded-lg border border-gray-800">
+            <span className="text-yellow-500 text-xs">●</span>
+            <span className="font-bold text-sm">{Number(user?.balance || 0).toFixed(2)} LE</span>
+          </div>
+          
+          <div className="flex items-center gap-1 bg-[#1a1a1a] px-3 py-1.5 rounded-lg border border-gray-800">
+            <span className="text-gray-400 text-xs">☆</span>
+            <span className="font-bold text-sm">Lv.0</span>
+          </div>
+
+          <div className="w-8 h-8 rounded-full bg-red-900/50 border border-red-500 flex items-center justify-center text-red-200 text-xs">
+            U
           </div>
         </div>
       </div>
 
-      {/* شريط الأخبار المتحرك (تم تغيير faucetpay إلى Binance) */}
-      <div className="bg-black py-1.5 px-4 overflow-hidden flex items-center gap-6 border-y border-gray-800">
-        <div className="flex items-center gap-2">
-          <span className="bg-blue-500 text-white font-bold px-1.5 py-0.5 rounded text-xs">F</span>
-          <span className="text-gray-300 text-sm whitespace-nowrap">Binance <span className="font-bold text-red-500">USDT LE 338.00</span></span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="bg-blue-500 text-white font-bold px-1.5 py-0.5 rounded text-xs">F</span>
-          <span className="text-gray-300 text-sm whitespace-nowrap">Binance <span className="font-bold text-red-500">USDT LE 150.00</span></span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="bg-blue-500 text-white font-bold px-1.5 py-0.5 rounded text-xs">F</span>
-          <span className="text-gray-300 text-sm whitespace-nowrap">Binance <span className="font-bold text-red-500">USDT LE 97.00</span></span>
+      {/* الشريط المتحرك */}
+      <div className="overflow-hidden w-full bg-[#0a0a0a]">
+        <div className="flex gap-2 w-max animate-marquee">
+          {tickerItems.map((item, index) => (
+            <div key={index} className="flex items-center gap-3 bg-[#1a1a1a] p-2 rounded-xl border border-gray-800 min-w-[140px]">
+              {/* غيرنا اللون للأصفر لأن الباينص لونه أصفر */}
+              <div className="bg-yellow-500 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg text-black">
+                {item.icon}
+              </div>
+              <div>
+                {/* هنا غيرنا الاسم إلى Binance */}
+                <p className="text-[10px] text-gray-400 leading-tight">Binance</p>
+                <p className="text-xs font-bold text-white">{item.name} <span className="text-red-500 ml-1">{item.amount}</span></p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
