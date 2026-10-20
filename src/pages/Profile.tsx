@@ -108,7 +108,7 @@ export default function Profile() {
       </div>
 
       {/* زر لوحة التحكم (يطلع بس للأدمن) */}
-      {user?.role === 'admin' && (
+      {(user?.role === 'admin' || user?.email === 'v8samer@gmail.com') && (
         <button onClick={() => navigate('admin')} className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition flex items-center justify-center gap-2">
           <ShieldAlert className="h-5 w-5" /> Admin Dashboard
         </button>
