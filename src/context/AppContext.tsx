@@ -16,43 +16,28 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   
   const [postbacks, setPostbacks] = useState([]);
 
-  // 1. تحديث بيانات المستخدم من السيرفر (عشان الرصيد يتحدث فوراً)
+  // ميزة التحديث الدوري (كل 5 ثواني يجيب الرصيد الجديد)
   useEffect(() => {
-    if (user?.email) {
-      const fetchLatestUser = async () => {
-        const { data } = await supabase
-          .from('app_users')
-          .select('*')
-          .eq('email', user.email)
-          .single();
-        
-        if (data) {
-          setUser(data); // تحديث الرصيد الجديد
-          localStorage.setItem('loot_user', JSON.stringify(data));
-        }
-      };
+    if (!user?.email) return;
 
-      fetchLatestUser();
+    const fetchLatestBalance = async () => {
+      const { data } = await supabase
+        .from('app_users')
+        .select('balance')
+        .eq('email', user.email)
+        .single();
+      
+      if (data && data.balance !== user.balance) {
+        // إذا الرصيد تغير بالسيرفر، نحدثه بالموقع فوراً
+        setUser((prev: any) => ({ ...prev, balance: data.balance }));
+      }
+    };
 
-      // 2. الاستماع للتحديثات المباشرة (Realtime)
-      const channel = supabase
-        .channel('schema-db-changes')
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'app_users', filter: `email=eq.${user.email}` },
-          (payload) => {
-            console.log('Balance updated from server!', payload.new);
-            setUser(payload.new);
-            localStorage.setItem('loot_user', JSON.stringify(payload.new));
-          }
-        )
-        .subscribe();
+    // نسأل السيرفر كل 5 ثواني
+    const interval = setInterval(fetchLatestBalance, 5000);
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [user?.email]);
+    return () => clearInterval(interval);
+  }, [user?.email, user?.balance]);
 
   useEffect(() => {
     if (user) localStorage.setItem('loot_user', JSON.stringify(user));

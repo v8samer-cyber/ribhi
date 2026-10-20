@@ -10,12 +10,11 @@ export default function Profile() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // جلب البيانات الحقيقية
+  // جلب البيانات الحقيقية (والتحديث كل 5 ثواني)
   useEffect(() => {
     if (!user) return;
 
     const fetchData = async () => {
-      // جلب العروض
       const { data: offersData } = await supabase
         .from('postback_log')
         .select('*')
@@ -24,7 +23,6 @@ export default function Profile() {
       
       if (offersData) setOffers(offersData);
 
-      // جلب السحوبات
       const { data: withdrawalsData } = await supabase
         .from('withdrawals')
         .select('*')
@@ -34,7 +32,10 @@ export default function Profile() {
       if (withdrawalsData) setWithdrawals(withdrawalsData);
     };
 
-    fetchData();
+    fetchData(); // نجيبها أول ما تفتح الصفحة
+
+    const interval = setInterval(fetchData, 5000); // ونجيبها كل 5 ثواني
+    return () => clearInterval(interval);
   }, [user]);
 
   const handleLogout = () => {
@@ -49,8 +50,6 @@ export default function Profile() {
   };
 
   const username = user?.email ? user.email.split('@')[0] : 'User';
-
-  // دالة لجلب أول حرف من اسم الشركة كأيقونة
   const getIconLetter = (provider: string) => {
     if (!provider) return 'O';
     return provider.charAt(0).toUpperCase();
@@ -86,18 +85,13 @@ export default function Profile() {
 
       {/* محتوى التبويبات */}
       <div className="space-y-3">
-        
-        {/* تبويب العروض */}
         {activeTab === 'offers' && (
           offers.length === 0 ? (
             <p className="text-center text-gray-500 mt-10">No offers completed yet.</p>
           ) : (
             offers.map((offer) => (
-              <div key={offer.id} className="bg-[#161616] border border-gray-800 rounded-2xl overflow-hidden transition-all">
-                <div 
-                  onClick={() => toggleExpand(offer.id)}
-                  className="p-4 flex items-center justify-between cursor-pointer"
-                >
+              <div key={offer.id} className="bg-[#161616] border border-gray-800 rounded-2xl overflow-hidden">
+                <div onClick={() => toggleExpand(offer.id)} className="p-4 flex items-center justify-between cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-600 to-red-600 flex items-center justify-center text-xl font-bold">
                       {getIconLetter(offer.provider)}
@@ -112,8 +106,6 @@ export default function Profile() {
                     {expandedId === offer.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </div>
                 </div>
-                
-                {/* التفاصيل */}
                 {expandedId === offer.id && (
                   <div className="px-4 pb-4 border-t border-gray-800 pt-3 text-sm">
                     <div className="flex justify-between py-1">
@@ -131,22 +123,17 @@ export default function Profile() {
           )
         )}
 
-        {/* تبويب الاستبيانات (فاضي حالياً) */}
         {activeTab === 'surveys' && (
           <p className="text-center text-gray-500 mt-10">No surveys available at the moment.</p>
         )}
 
-        {/* تبويب السحوبات */}
         {activeTab === 'cashout' && (
           withdrawals.length === 0 ? (
             <p className="text-center text-gray-500 mt-10">No withdrawals yet.</p>
           ) : (
             withdrawals.map((w) => (
-              <div key={w.id} className="bg-[#161616] border border-gray-800 rounded-2xl overflow-hidden transition-all">
-                <div 
-                  onClick={() => toggleExpand(w.id)}
-                  className="p-4 flex items-center justify-between cursor-pointer"
-                >
+              <div key={w.id} className="bg-[#161616] border border-gray-800 rounded-2xl overflow-hidden">
+                <div onClick={() => toggleExpand(w.id)} className="p-4 flex items-center justify-between cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-xl font-bold">
                       B
@@ -161,8 +148,6 @@ export default function Profile() {
                     {expandedId === w.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </div>
                 </div>
-                
-                {/* التفاصيل */}
                 {expandedId === w.id && (
                   <div className="px-4 pb-4 border-t border-gray-800 pt-3 text-sm">
                     <div className="flex justify-between py-1">
@@ -181,13 +166,8 @@ export default function Profile() {
         )}
       </div>
 
-      {/* زر الخروج */}
-      <button 
-        onClick={handleLogout} 
-        className="mt-8 w-full bg-[#161616] border border-red-500/30 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-500/10 transition flex items-center justify-center gap-2"
-      >
-        <LogOut className="h-5 w-5" />
-        Logout
+      <button onClick={handleLogout} className="mt-8 w-full bg-[#161616] border border-red-500/30 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-500/10 transition flex items-center justify-center gap-2">
+        <LogOut className="h-5 w-5" /> Logout
       </button>
     </div>
   );

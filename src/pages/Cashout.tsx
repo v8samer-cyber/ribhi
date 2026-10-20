@@ -9,8 +9,12 @@ export default function Cashout() {
   const [loading, setLoading] = useState(false);
 
   const currentBalance = user?.balance || 0;
-  const minWithdrawCash = 1000; 
-  const canWithdraw = currentBalance >= Number(amount) && Number(amount) >= minWithdrawCash;
+  const minWithdrawCash = 100; // غيرناها لـ 100 عشان تكدر تسحب 500
+  
+  const numAmount = Number(amount);
+  const isAmountValid = numAmount >= minWithdrawCash;
+  const isBalanceEnough = currentBalance >= numAmount;
+  const canWithdraw = isAmountValid && isBalanceEnough;
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +28,7 @@ export default function Cashout() {
         .from('withdrawals')
         .insert([{
           user_id: user.id,
-          amount: Number(amount),
+          amount: numAmount,
           wallet_address: wallet,
           status: 'pending'
         }]);
@@ -32,7 +36,7 @@ export default function Cashout() {
       if (withdrawError) throw withdrawError;
 
       // 2. خصم المبلغ من رصيد المستخدم
-      const newBalance = currentBalance - Number(amount);
+      const newBalance = currentBalance - numAmount;
       const { error: updateError } = await supabase
         .from('app_users')
         .update({ balance: newBalance })
@@ -44,15 +48,22 @@ export default function Cashout() {
       setUser({ ...user, balance: newBalance });
       setAmount('');
       setWallet('');
-      alert(`Withdrawal request of ${amount} LE to Binance submitted successfully!`);
+      alert(`Withdrawal request of ${numAmount} LE to Binance submitted successfully!`);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Failed to process withdrawal. Please try again.');
+      alert(`Failed: ${error.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
   };
+
+  // تحديد نص الزر
+  let buttonText = 'Request Withdrawal';
+  if (loading) buttonText = 'Processing...';
+  else if (!isAmountValid) buttonText = `Minimum is ${minWithdrawCash} LE`;
+  else if (!isBalanceEnough) buttonText = 'Insufficient Balance';
+  else if (!canWithdraw) buttonText = 'Invalid Amount';
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-6 pb-24">
@@ -80,7 +91,7 @@ export default function Cashout() {
         </div>
 
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Amount (Min 1000 LE)</label>
+          <label className="block text-sm text-gray-400 mb-1">Amount (Min {minWithdrawCash} LE)</label>
           <input 
             type="number" 
             value={amount} 
@@ -88,7 +99,7 @@ export default function Cashout() {
             required 
             min={minWithdrawCash}
             className="w-full bg-black border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-orange-500" 
-            placeholder="1000" 
+            placeholder="500" 
           />
         </div>
 
@@ -99,7 +110,7 @@ export default function Cashout() {
             !canWithdraw || loading ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-orange-500 text-white hover:bg-orange-600'
           }`}
         >
-          {loading ? 'Processing...' : canWithdraw ? 'Request Withdrawal' : 'Insufficient Balance'}
+          {buttonText}
         </button>
       </form>
     </div>
