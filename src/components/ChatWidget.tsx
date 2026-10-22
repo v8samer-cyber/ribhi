@@ -16,7 +16,6 @@ export default function ChatWidget() {
   const [requests, setRequests] = useState<any[]>([]);
   const [friends, setFriends] = useState<any[]>([]);
   
-  // حالات الحظر
   const [blockedEmails, setBlockedEmails] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   
@@ -31,7 +30,7 @@ export default function ChatWidget() {
 
   const keepLast50 = (msgs: any[]) => msgs.slice(-50);
 
-  // 1. جلب البيانات (بما فيها قائمة الحظر)
+  // 1. جلب البيانات الأولية
   const fetchInitialData = async () => {
     if (!user?.email) return;
     
@@ -57,8 +56,14 @@ export default function ChatWidget() {
       setFriends(uniqueFriends);
     }
 
-    // جلب قائمة المحظورين
-    const { data: blocks } = await supabase.from('user_blocks').select('blocked_email').eq('blocker_email', user.email);
+    // 👇 جلب آخر 10 أشخاص محظورين فقط (حسب التاريخ)
+    const { data: blocks } = await supabase
+      .from('user_blocks')
+      .select('blocked_email')
+      .eq('blocker_email', user.email)
+      .order('created_at', { ascending: false }) // الأحدث أولاً
+      .limit(10); // حد أقصى 10
+      
     if (blocks) setBlockedEmails(blocks.map(b => b.blocked_email));
   };
 
@@ -66,11 +71,13 @@ export default function ChatWidget() {
     fetchInitialData();
   }, [user]);
 
-  // 2. الاستماع للرسائل الحية
+  // 2. الاستماع للرسائل الحية (Realtime)
   useEffect(() => {
     if (!user?.email) return;
 
-    const publicChannel = supabase.channel('public_chat_channel')
+    const uniqueId = Math.random().toString(36).substring(7);
+
+    const publicChannel = supabase.channel(`public_${uniqueId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'public_chat' }, (payload) => {
         setPublicMessages((prev) => {
           if (prev.some(m => m.id === payload.new.id)) return prev;
@@ -78,7 +85,7 @@ export default function ChatWidget() {
         });
       }).subscribe();
 
-    const requestsChannel = supabase.channel('chat_requests_channel')
+    const requestsChannel = supabase.channel(`requests_${uniqueId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_requests' }, (payload) => {
         const newData = payload.new as any;
         if (payload.eventType === 'INSERT' && newData?.receiver_email === user.email && newData?.status === 'pending') {
@@ -108,7 +115,8 @@ export default function ChatWidget() {
     };
     fetchPrivate();
 
-    const privateChannel = supabase.channel(`private_${activeChat.email}`)
+    const uniqueId = Math.random().toString(36).substring(7);
+    const privateChannel = supabase.channel(`private_${activeChat.email}_${uniqueId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
         const msg = payload.new as any;
         if ((msg.sender_email === user.email && msg.receiver_email === activeChat.email) || 
@@ -132,7 +140,6 @@ export default function ChatWidget() {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
     
-    // التحقق من الحظر قبل إرسال رسالة خاصة
     if (activeChat && blockedEmails.includes(activeChat.email)) {
       alert("لا يمكنك مراسلة هذا الشخص لأنه محظور.");
       return;
@@ -167,7 +174,7 @@ export default function ChatWidget() {
     if (!error) {
       setBlockedEmails(prev => [...prev, emailToBlock]);
       setRequestPopupUser(null);
-      if (activeChat?.email === emailToBlock) setActiveChat(null); // إغلاق الدردشة إذا كان محظوراً
+      if (activeChat?.email === emailToBlock) setActiveChat(null);
     }
   };
 
@@ -177,7 +184,6 @@ export default function ChatWidget() {
     setBlockedEmails(prev => prev.filter(e => e !== emailToUnblock));
   };
 
-  // قبول/رفض الطلبات
   const handleRequest = async (id: number, senderEmail: string, status: 'accepted' | 'rejected') => {
     await supabase.from('chat_requests').update({ status }).eq('id', id);
     setRequests(prev => prev.filter(r => r.id !== id));
@@ -189,24 +195,22 @@ export default function ChatWidget() {
 
   const banUser = async (emailToBan: string) => {
     if (!isAdmin) return;
-    if (window.confirm(`حظر ${emailToBan} نهائياً؟`)) {
+    if (window.confirm(`حظر ${emailToBan} نهائياً من الموقع؟`)) {
       await supabase.from('banned_users').insert([{ email: emailToBan }]);
       setPublicMessages(prev => prev.filter(m => m.user_email !== emailToBan));
     }
   };
 
   const hasNewRequests = requests.length > 0;
-  
-  // تصفية الرسائل والأصدقاء (إخفاء المحظورين)
   const visiblePublicMessages = publicMessages.filter(m => !blockedEmails.includes(m.user_email));
   const visibleFriends = friends.filter(f => !blockedEmails.includes(f.email));
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end">
+    <div className="fixed bottom-20 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
       
       {/* 1. نافذة طلب الصداقة + الحظر */}
       {requestPopupUser && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={() => setRequestPopupUser(null)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
             <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center mb-3">
               <User className="h-6 w-6 text-gray-300" />
@@ -224,12 +228,12 @@ export default function ChatWidget() {
         </div>
       )}
 
-      {/* 2. نافذة إعدادات الحظر */}
+      {/* 2. نافذة إعدادات الحظر (المحظورين) */}
       {showSettings && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={() => setShowSettings(false)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowSettings(false)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl w-[80vw] sm:w-72 max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-white font-bold mb-4 flex items-center gap-2 border-b border-gray-700 pb-2">
-              <ShieldAlert className="h-5 w-5 text-red-500" /> Blocked Users
+              <Ban className="h-5 w-5 text-red-500" /> Blocked Users (Last 10)
             </h3>
             
             <div className="flex-1 overflow-y-auto min-h-0">
@@ -253,13 +257,13 @@ export default function ChatWidget() {
       )}
 
       {hasNewRequests && !isOpen && (
-        <button onClick={() => { setIsOpen(true); setShowRequestsMenu(true); }} className="mb-4 bg-yellow-500 text-white p-3 rounded-full shadow-lg animate-bounce">
+        <button onClick={() => { setIsOpen(true); setShowRequestsMenu(true); }} className="mb-4 mr-4 bg-yellow-500 text-white p-3 rounded-full shadow-lg animate-bounce pointer-events-auto">
           <Bell className="h-6 w-6" />
         </button>
       )}
 
       {isOpen && (
-        <div className="bg-[#161616] w-[95vw] sm:w-[380px] h-[75vh] sm:h-[500px] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden relative">
+        <div className="bg-[#161616] w-[96vw] sm:w-[380px] h-[75vh] sm:h-[500px] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden relative pointer-events-auto">
           
           <div className="bg-teal-600 p-3 flex justify-between items-center text-white shrink-0">
             <div className="flex items-center gap-2">
@@ -274,10 +278,15 @@ export default function ChatWidget() {
             </div>
             
             <div className="flex gap-2 items-center">
-              {/* زر الإعدادات (يظهر فقط في تبويب الخاص) */}
-              {!activeChat && activeTab === 'private' && (
-                <button onClick={() => setShowSettings(true)} className="hover:bg-teal-700 p-1 rounded">
-                  <Settings className="h-5 w-5" />
+              {/* 👇 زر الحظر 🚯 في الأعلى (يظهر دائماً لإدارة المحظورين) 👇 */}
+              <button onClick={() => setShowSettings(true)} className="hover:bg-teal-700 p-1 rounded text-red-200" title="Blocked Users">
+                <Ban className="h-5 w-5" />
+              </button>
+
+              {/* زر حظر الصديق (يظهر فقط عند فتح محادثة خاصة) */}
+              {activeChat && (
+                <button onClick={() => blockUser(activeChat.email)} className="hover:bg-teal-700 p-1 rounded text-red-300" title="Block this user">
+                  <UserX className="h-5 w-5" />
                 </button>
               )}
 
@@ -321,26 +330,25 @@ export default function ChatWidget() {
               const username = msg.username || msg.user_email.split('@')[0];
               return (
                 <div key={index} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <span className={`text-[10px] ${isMe ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`text-[11px] font-medium ${isMe ? 'text-gray-500' : 'text-gray-400'}`}>
                       {isMe ? 'You' : username}
                     </span>
                     
-                    {/* أيقونة المستخدم لطلب الصداقة أو الحظر */}
                     {!isMe && (
-                      <button onClick={() => setRequestPopupUser({ email: msg.user_email, username })} className="text-teal-400 hover:text-teal-300">
-                        <User className="h-3 w-3" />
+                      <button onClick={() => setRequestPopupUser({ email: msg.user_email, username })} className="text-teal-400 hover:text-teal-300 p-0.5">
+                        <User className="h-4 w-4" />
                       </button>
                     )}
 
-                    {isAdmin && !isMe && <button onClick={() => banUser(msg.user_email)} className="text-red-500 opacity-0 group-hover:opacity-100"><Ban className="h-3 w-3" /></button>}
+                    {isAdmin && !isMe && <button onClick={() => banUser(msg.user_email)} className="text-red-500 opacity-0 group-hover:opacity-100"><Ban className="h-4 w-4" /></button>}
                   </div>
                   <div className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>{msg.message}</div>
                 </div>
               );
             })}
 
-            {/* قائمة الأصدقاء (بعد إخفاء المحظورين) */}
+            {/* قائمة الأصدقاء */}
             {!activeChat && activeTab === 'private' && (
               <div className="flex flex-col">
                 {visibleFriends.length === 0 ? <p className="text-center text-gray-500 text-xs mt-5">No friends yet.</p> : null}
@@ -379,7 +387,7 @@ export default function ChatWidget() {
         </div>
       )}
 
-      <button onClick={() => { setIsOpen(!isOpen); }} className="bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105">
+      <button onClick={() => { setIsOpen(!isOpen); }} className="bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 mr-4 pointer-events-auto">
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
     </div>
