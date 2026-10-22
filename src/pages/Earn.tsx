@@ -17,6 +17,17 @@ export default function Earn() {
       desc: 'Fast tasks & surveys'
     },
     {
+      name: 'Wallunex',
+      logo: 'W',
+      badge: 'NEW',
+      badgeIcon: Flame,
+      stars: 4,
+      color: 'text-green-400',
+      // 👇 ركز هنا فقط 👇
+      url: `https://wallunex.com/wall?apiKey=bjfJ1dcewxjxHjkaZFQdYud688PjyiON&userId=${userId}`,
+      desc: 'More tasks & surveys'
+    },
+    {
       name: 'MyLead',
       logo: 'M',
       badge: 'HOT',
@@ -25,16 +36,6 @@ export default function Earn() {
       color: 'text-blue-400',
       url: `https://reward-me.eu/79f91f34-cd91-11f1-9b11-129a1c289511?ml_sub1=${userId}`,
       desc: 'Complete offers & surveys'
-    },
-    {
-      name: 'OfferToro',
-      logo: 'OT',
-      badge: 'VIP',
-      badgeIcon: Flame,
-      stars: 5,
-      color: 'text-purple-400',
-      url: `https://offertoro.com`,
-      desc: 'Earn cash for playing games'
     }
   ];
 
