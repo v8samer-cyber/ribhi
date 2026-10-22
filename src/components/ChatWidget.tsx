@@ -25,18 +25,25 @@ export default function ChatWidget() {
   const [showRequestsMenu, setShowRequestsMenu] = useState(false);
   const [requestPopupUser, setRequestPopupUser] = useState<any | null>(null); 
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // حالة جديدة لنافذة الحظر في الخاص
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
 
-  // دالة لجلب البيانات
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isAdmin = user?.email === "v8samer@gmail.com";
+
+  // دالة جلب البيانات (تستخدم في البداية وفي التحديث التلقائي)
   const fetchData = async () => {
     if (!user?.email) return;
     
+    // 1. جلب الرسائل العامة
     const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
     if (pub) setPublicMessages(pub);
 
+    // 2. جلب الطلبات
     const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
     if (req) setRequests(req);
 
+    // 3. جلب الأصدقاء
     const { data: friendData } = await supabase
       .from('chat_requests')
       .select('*')
@@ -53,96 +60,83 @@ export default function ChatWidget() {
       setFriends(uniqueFriends);
     }
 
+    // 4. جلب المحظورين
     const { data: blocks } = await supabase
       .from('user_blocks')
       .select('blocked_email')
-      .eq('blocker_email', user.email)
-      .order('created_at', { ascending: false });
-      
+      .eq('blocker_email', user.email);
     if (blocks) setBlockedEmails(blocks.map(b => b.blocked_email));
   };
 
+  // دالة جلب الرسائل الخاصة للمحادثة المفتوحة
+  const fetchPrivateMessages = async () => {
+    if (!activeChat || !user?.email) return;
+    const { data } = await supabase.from('private_messages').select('*')
+      .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`)
+      .order('created_at', { ascending: true }).limit(50);
+    if (data) setPrivateMessages(data);
+  };
+
+  // 1. التشغيل الأولي
   useEffect(() => {
     fetchData();
   }, [user]);
 
-  // 👇👇 [هام جداً] الاستماع اللحظي مع معالجة الأخطاء وإعادة الاتصال 👇👇
+  // 2. جلب الرسائل الخاصة عند فتح محادثة
+  useEffect(() => {
+    fetchPrivateMessages();
+  }, [activeChat]);
+
+  // 👇👇 [الحل الجذري] نظام التحديث التلقائي كل 3 ثواني (يضمن وصول الرسائل حتى لو فشل الـ Realtime) 👇👇
   useEffect(() => {
     if (!user?.email) return;
 
-    // قناة الدردشة العامة
-    const publicChannel = supabase.channel('realtime_public_chat')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'public_chat' },
-        (payload) => {
-          setPublicMessages((prev) => {
-            if (prev.some(m => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new].slice(-50);
-          });
-        }
-      )
-      .subscribe((status, err) => {
-        if (err) console.error('Public Channel Error:', err);
-        console.log('Public Channel Status:', status);
-      });
+    const interval = setInterval(() => {
+      // تحديث الرسائل العامة
+      supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50)
+        .then(({ data }) => { if (data) setPublicMessages(data); });
 
-    // قناة الطلبات
-    const requestsChannel = supabase.channel('realtime_requests')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'chat_requests' },
-        (payload) => {
-          const newData = payload.new as any;
-          if (payload.eventType === 'INSERT' && newData?.receiver_email === user.email && newData?.status === 'pending') {
-            setRequests(prev => [...prev, newData]);
-          }
-          if (payload.eventType === 'UPDATE' && newData?.status === 'accepted') {
-            fetchData();
-          }
+      // تحديث الطلبات
+      supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending')
+        .then(({ data }) => { if (data) setRequests(data); });
+
+      // تحديث الرسائل الخاصة إذا كانت هناك محادثة مفتوحة
+      if (activeChat) {
+        supabase.from('private_messages').select('*')
+          .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`)
+          .order('created_at', { ascending: true }).limit(50)
+          .then(({ data }) => { if (data) setPrivateMessages(data); });
+      }
+    }, 3000); // كل 3 ثواني
+
+    return () => clearInterval(interval);
+  }, [user, activeChat]);
+
+  // الاستماع اللحظي (Realtime) - يعمل بالتوازي مع النظام الاحتياطي
+  useEffect(() => {
+    if (!user?.email) return;
+    
+    // أسماء قنوات عشوائية لمنع التداخل
+    const uniqueId = Math.random().toString(36).substring(7);
+
+    const publicSub = supabase.channel(`pub_${uniqueId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'public_chat' }, (payload) => {
+        setPublicMessages((prev) => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new].slice(-50));
+      }).subscribe();
+
+    const reqSub = supabase.channel(`req_${uniqueId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_requests' }, (payload) => {
+        if (payload.eventType === 'UPDATE' && payload.new.status === 'accepted') {
+          fetchData();
         }
-      )
-      .subscribe();
+      }).subscribe();
 
     return () => {
-      supabase.removeChannel(publicChannel);
-      supabase.removeChannel(requestsChannel);
+      supabase.removeChannel(publicSub);
+      supabase.removeChannel(reqSub);
     };
   }, [user]);
 
-  // قناة الرسائل الخاصة
-  useEffect(() => {
-    if (!activeChat || !user?.email) return;
-
-    const fetchPrivate = async () => {
-      const { data } = await supabase.from('private_messages').select('*')
-        .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`)
-        .order('created_at', { ascending: true }).limit(50);
-      if (data) setPrivateMessages(data);
-    };
-    fetchPrivate();
-
-    const privateChannel = supabase.channel(`realtime_private_${activeChat.email}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'private_messages' },
-        (payload) => {
-          const msg = payload.new as any;
-          if ((msg.sender_email === user.email && msg.receiver_email === activeChat.email) || 
-              (msg.sender_email === activeChat.email && msg.receiver_email === user.email)) {
-            setPrivateMessages((prev) => {
-              if (prev.some(m => m.id === msg.id)) return prev;
-              return [...prev, msg].slice(-50);
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(privateChannel); };
-  }, [activeChat, user]);
-
-  // النزول التلقائي لآخر رسالة
   useEffect(() => {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
@@ -162,12 +156,13 @@ export default function ChatWidget() {
 
     if (activeChat) {
       await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]);
+      fetchPrivateMessages(); // تحديث فوري
     } else {
       await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]);
+      fetchData(); // تحديث فوري
     }
   };
 
-  // إرسال طلب صداقة
   const sendFriendRequest = async () => {
     if (!requestPopupUser) return;
     await supabase.from('chat_requests').insert([{ sender_email: user.email, receiver_email: requestPopupUser.email, status: 'pending' }]);
@@ -181,17 +176,18 @@ export default function ChatWidget() {
     const { error } = await supabase.from('user_blocks').insert([{ blocker_email: user.email, blocked_email: emailToBlock }]);
     if (!error) {
       setBlockedEmails(prev => [...prev, emailToBlock]);
-      setActiveChat(null);
+      setShowBlockConfirm(false);
+      setActiveChat(null); // إغلاق الدردشة
+    } else {
+      alert("حدث خطأ أثناء الحظر: " + error.message);
     }
   };
 
-  // فك الحظر
   const unblockUser = async (emailToUnblock: string) => {
     await supabase.from('user_blocks').delete().eq('blocker_email', user.email).eq('blocked_email', emailToUnblock);
     setBlockedEmails(prev => prev.filter(e => e !== emailToUnblock));
   };
 
-  // قبول الطلبات
   const handleRequest = async (id: number, senderEmail: string, status: 'accepted' | 'rejected') => {
     await supabase.from('chat_requests').update({ status }).eq('id', id);
     setRequests(prev => prev.filter(r => r.id !== id));
@@ -208,7 +204,7 @@ export default function ChatWidget() {
   return (
     <div className="fixed bottom-20 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
       
-      {/* نافذة طلب الصداقة */}
+      {/* نافذة إرسال طلب صداقة */}
       {requestPopupUser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
@@ -219,6 +215,23 @@ export default function ChatWidget() {
             <button onClick={sendFriendRequest} className="w-full bg-teal-500 hover:bg-teal-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2">
               <UserPlus className="h-4 w-4" /> Send Request
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تأكيد الحظر في الخاص */}
+      {showBlockConfirm && activeChat && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockConfirm(false)}>
+          <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 bg-red-900/50 rounded-full flex items-center justify-center mb-3">
+              <Ban className="h-6 w-6 text-red-500" />
+            </div>
+            <h4 className="text-white font-bold mb-1">Block {activeChat.username}?</h4>
+            <p className="text-xs text-gray-400 mb-4 text-center">You will no longer see their messages.</p>
+            <div className="flex gap-2 w-full">
+              <button onClick={() => setShowBlockConfirm(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg text-xs">Cancel</button>
+              <button onClick={() => blockUser(activeChat.email)} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-xs font-bold">Block</button>
+            </div>
           </div>
         </div>
       )}
@@ -290,9 +303,10 @@ export default function ChatWidget() {
             </div>
             
             <div className="flex gap-2 items-center">
+              {/* 👇 زر الحظر في الخاص أصبح أيقونة مستخدم 👤 👇 */}
               {activeChat && (
-                <button onClick={() => blockUser(activeChat.email)} className="hover:bg-teal-700 p-1 rounded text-red-200" title="Block this user">
-                  <Ban className="h-5 w-5" />
+                <button onClick={() => setShowBlockConfirm(true)} className="hover:bg-teal-700 p-1 rounded text-white" title="User Options">
+                  <User className="h-5 w-5" />
                 </button>
               )}
 
