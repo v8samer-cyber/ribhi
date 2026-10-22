@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { MessageCircle, X, Send, Bell, Ban, ArrowRight, ArrowLeft, User } from 'lucide-react';
+import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User } from 'lucide-react';
 import { ProfanityFilter } from "@nzrm/text-shield";
 
 const filter = new ProfanityFilter({ languages: ["en", "ar"] });
@@ -10,16 +10,17 @@ export default function ChatWidget() {
   const { user } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   
-  // التبويبات: 'public' (العامة), 'requests' (الطلبات), 'private_list' (قائمة الأصدقاء), 'private_chat' (المحادثة نفسها)
-  const [view, setView] = useState<'public' | 'requests' | 'private_list' | 'private_chat'>('public');
+  // التبويبات: 'public' (العامة), 'private' (الخاصة)
+  const [activeTab, setActiveTab] = useState<'public' | 'private'>('public');
   
   const [publicMessages, setPublicMessages] = useState<any[]>([]);
   const [privateMessages, setPrivateMessages] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
-  const [friends, setFriends] = useState<any[]>([]); // قائمة الأصدقاء
+  const [friends, setFriends] = useState<any[]>([]); // قائمة الأصدقاء الذين تم قبولهم
   
   const [newMessage, setNewMessage] = useState('');
-  const [activeChat, setActiveChat] = useState<string | null>(null); // إيميل الشخص الذي نتحدث معه
+  const [activeChat, setActiveChat] = useState<any | null>(null); // الشخص الذي نتحدث معه
+  const [showRequestsMenu, setShowRequestsMenu] = useState(false); // قائمة الطلبات المنسدلة من الجرس
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -28,24 +29,25 @@ export default function ChatWidget() {
 
   // 1. جلب الرسائل العامة
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || activeTab !== 'public' || activeChat) return;
     const fetchPublic = async () => {
       const { data } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
       if (data) setPublicMessages(data);
     };
     fetchPublic();
 
-    const sub = supabase.channel('public_chat').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'public_chat' }, (payload) => {
-      setPublicMessages((prev) => {
-        if (prev.some(m => m.id === payload.new.id)) return prev;
-        return [...prev, payload.new];
-      });
-    }).subscribe();
+    const sub = supabase.channel('public_chat_channel')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'public_chat' }, (payload) => {
+        setPublicMessages((prev) => {
+          if (prev.some(m => m.id === payload.new.id)) return prev;
+          return [...prev, payload.new];
+        });
+      }).subscribe();
 
     return () => { supabase.removeChannel(sub); };
-  }, [isOpen]);
+  }, [isOpen, activeTab, activeChat]);
 
-  // 2. جلب الطلبات وقائمة الأصدقاء
+  // 2. جلب طلبات الدردشة والأصدقاء
   useEffect(() => {
     if (!user?.email) return;
     
@@ -56,262 +58,234 @@ export default function ChatWidget() {
     };
     fetchRequests();
 
-    // جلب قائمة الأصدقاء (الذين تم قبول طلباتهم)
+    // جلب قائمة الأصدقاء (المقبولين)
     const fetchFriends = async () => {
-      const { data } = await supabase
-        .from('chat_requests')
-        .select('sender_email, sender_profile:app_users!chat_requests_sender_email_fkey(username, avatar_url)')
-        .eq('receiver_email', user.email)
-        .eq('status', 'accepted');
-      
-      if (data) {
-        // تنسيق البيانات لتناسب العرض
-        const formattedFriends = data.map((f: any) => ({
-          email: f.sender_email,
-          username: f.sender_profile?.username || f.sender_email.split('@')[0],
-          avatar: f.sender_profile?.avatar_url
-        }));
-        setFriends(formattedFriends);
-      }
+      const { data } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'accepted');
+      if (data) setFriends(data);
     };
     fetchFriends();
 
     // الاستماع للتحديثات
-    const sub = supabase.channel('chat_requests').on('postgres_changes', { event: '*', schema: 'public', table: 'chat_requests' }, (payload) => {
-      if (payload.new && payload.new.receiver_email === user.email) {
-        if (payload.new.status === 'pending') {
-          setRequests(prev => prev.some(r => r.id === payload.new.id) ? prev : [...prev, payload.new]);
-        } else if (payload.new.status === 'accepted') {
-          // تحديث قائمة الأصدقاء عند القبول
-          fetchFriends();
-          setRequests(prev => prev.filter(r => r.id !== payload.new.id));
+    const sub = supabase.channel('chat_requests_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_requests' }, (payload) => {
+        if (payload.new && payload.new.receiver_email === user.email) {
+          if (payload.new.status === 'pending') {
+            setRequests(prev => prev.some(r => r.id === payload.new.id) ? prev : [...prev, payload.new]);
+          } else if (payload.new.status === 'accepted') {
+            fetchFriends();
+            setRequests(prev => prev.filter(r => r.id !== payload.new.id));
+          }
         }
-      }
-    }).subscribe();
+      }).subscribe();
 
     return () => { supabase.removeChannel(sub); };
   }, [user]);
 
-  // 3. جلب الرسائل الخاصة للمحادثة النشطة
+  // 3. جلب الرسائل الخاصة
   useEffect(() => {
-    if (!isOpen || view !== 'private_chat' || !activeChat || !user?.email) return;
+    if (!isOpen || !activeChat || !user?.email) return;
     
     const fetchPrivate = async () => {
-      const { data } = await supabase.from('private_messages').select('*').or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat}),and(sender_email.eq.${activeChat},receiver_email.eq.${user.email})`).order('created_at', { ascending: true });
+      const { data } = await supabase.from('private_messages').select('*')
+        .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.sender_email}),and(sender_email.eq.${activeChat.sender_email},receiver_email.eq.${user.email})`)
+        .order('created_at', { ascending: true });
       if (data) setPrivateMessages(data);
     };
     fetchPrivate();
 
-    const sub = supabase.channel('private_messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
-      const msg = payload.new;
-      if ((msg.sender_email === user.email && msg.receiver_email === activeChat) || (msg.sender_email === activeChat && msg.receiver_email === user.email)) {
-        setPrivateMessages((prev) => {
-          if (prev.some(m => m.id === msg.id)) return prev;
-          return [...prev, msg];
-        });
-      }
-    }).subscribe();
+    const sub = supabase.channel('private_messages_channel')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
+        const msg = payload.new;
+        if ((msg.sender_email === user.email && msg.receiver_email === activeChat.sender_email) || 
+            (msg.sender_email === activeChat.sender_email && msg.receiver_email === user.email)) {
+          setPrivateMessages((prev) => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+        }
+      }).subscribe();
 
     return () => { supabase.removeChannel(sub); };
-  }, [view, activeChat, user, isOpen]);
+  }, [activeChat, user, isOpen]);
 
-  // النزول التلقائي لآخر رسالة
+  // النزول لآخر رسالة
   useEffect(() => {
     if (isOpen) {
-      const timeout = setTimeout(() => {
+      setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }, 100);
-      return () => clearTimeout(timeout);
     }
-  }, [publicMessages, privateMessages, view, isOpen]);
+  }, [publicMessages, privateMessages, activeChat, isOpen]);
 
-  // دالة الإرسال
+  // دالة إرسال الرسائل
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
-    const cleanMessage = filter.clean(newMessage);
-    const messageToSend = cleanMessage;
+
+    const messageToSend = filter.clean(newMessage);
     setNewMessage('');
 
-    if (view === 'public') {
+    if (!activeChat) {
+      // إرسال للعامة
       const displayName = user?.username || user?.email.split('@')[0];
       const tempMsg = { id: Date.now(), user_email: user.email, username: displayName, message: messageToSend, created_at: new Date().toISOString() };
       setPublicMessages(prev => [...prev, tempMsg]);
-      await supabase.from('public_chat').insert([{ user_email: user.email, username: displayName, message: messageToSend }]);
-    } else if (view === 'private_chat' && activeChat) {
-      const tempMsg = { id: Date.now(), sender_email: user.email, receiver_email: activeChat, message: messageToSend, created_at: new Date().toISOString() };
+      const { error } = await supabase.from('public_chat').insert([{ user_email: user.email, username: displayName, message: messageToSend }]);
+      if (error) alert("خطأ في الإرسال: " + error.message);
+    } else {
+      // إرسال للخاص
+      const tempMsg = { id: Date.now(), sender_email: user.email, receiver_email: activeChat.sender_email, message: messageToSend, created_at: new Date().toISOString() };
       setPrivateMessages(prev => [...prev, tempMsg]);
-      await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat, message: messageToSend }]);
+      const { error } = await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.sender_email, message: messageToSend }]);
+      if (error) alert("خطأ في الإرسال: " + error.message);
     }
   };
 
+  // طلب دردشة خاصة
   const requestChat = async (receiverEmail: string) => {
     if (receiverEmail === user?.email) return;
-    await supabase.from('chat_requests').insert([{ sender_email: user.email, receiver_email: receiverEmail, status: 'pending' }]);
-    alert("تم إرسال طلب دردشة.");
+    const { error } = await supabase.from('chat_requests').insert([{ sender_email: user.email, receiver_email: receiverEmail, status: 'pending' }]);
+    if (error) alert("حدث خطأ أو تم إرسال طلب مسبقاً.");
+    else alert("تم إرسال الطلب بنجاح.");
   };
 
+  // قبول أو رفض الطلب
   const handleRequest = async (requestId: number, senderEmail: string, status: 'accepted' | 'rejected') => {
     await supabase.from('chat_requests').update({ status }).eq('id', requestId);
     setRequests((prev) => prev.filter((r) => r.id !== requestId));
     if (status === 'accepted') {
-      // إضافة الشخص للقائمة فوراً (سيتم تحديثها من السيرفر أيضاً)
-      setFriends(prev => [...prev, { email: senderEmail, username: senderEmail.split('@')[0], avatar: null }]);
+      setFriends(prev => [...prev, { sender_email: senderEmail, id: requestId }]);
+      setShowRequestsMenu(false);
+      setActiveTab('private');
     }
   };
 
+  // حظر مستخدم (للأدمن)
   const banUser = async (emailToBan: string) => {
     if (!isAdmin) return;
-    const confirmBan = window.confirm(`هل أنت متأكد من حظر ${emailToBan}؟`);
-    if (confirmBan) {
+    if (window.confirm(`حظر ${emailToBan}؟`)) {
       await supabase.from('banned_users').insert([{ email: emailToBan }]);
       setPublicMessages((prev) => prev.filter(m => m.user_email !== emailToBan));
-      alert("تم حظر المستخدم.");
     }
   };
 
   const hasNewRequests = requests.length > 0;
 
   return (
-    <div className="fixed bottom-20 right-2 sm:right-4 z-50 flex flex-col items-end">
+    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end">
+      
+      {/* 🔔 الجرس الأصفر العائم (يظهر فقط عند وجود طلبات) */}
+      {hasNewRequests && !isOpen && (
+        <button 
+          onClick={() => { setIsOpen(true); setShowRequestsMenu(true); }}
+          className="mb-4 bg-yellow-500 text-white p-3 rounded-full shadow-lg animate-bounce"
+        >
+          <Bell className="h-6 w-6" />
+        </button>
+      )}
+
+      {/* نافذة الدردشة */}
       {isOpen && (
-        <div className="bg-[#161616] w-[95vw] sm:w-[380px] h-[75vh] sm:h-[500px] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden animate-in fade-in slide-in-from-bottom-5">
+        <div className="bg-[#161616] w-[95vw] sm:w-[380px] h-[75vh] sm:h-[500px] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden relative">
           
-          {/* الهيدر (يتغير حسب التبويب) */}
+          {/* الهيدر */}
           <div className="bg-teal-600 p-3 flex justify-between items-center text-white shrink-0">
             <div className="flex items-center gap-2">
-              {view === 'private_chat' && (
-                <button onClick={() => setView('private_list')} className="hover:bg-teal-700 p-1 rounded">
-                  <ArrowLeft className="h-4 w-4" />
+              {activeChat && (
+                <button onClick={() => setActiveChat(null)} className="hover:bg-teal-700 p-1 rounded">
+                  <ArrowLeft className="h-5 w-5" />
                 </button>
               )}
               <h3 className="font-bold text-sm">
-                {view === 'public' && 'Live Chat'}
-                {view === 'requests' && 'Chat Requests'}
-                {view === 'private_list' && 'My Messages'}
-                {view === 'private_chat' && `Chat with ${activeChat?.split('@')[0]}`}
+                {activeChat ? `Chat with ${activeChat.sender_email.split('@')[0]}` : (activeTab === 'public' ? 'Public Chat' : 'My Friends')}
               </h3>
             </div>
             
             <div className="flex gap-2 items-center">
-              {/* الجرس الأصفر (فقط للطلبات) */}
-              {hasNewRequests && view !== 'requests' && (
-                <button onClick={() => setView('requests')} className="relative bg-teal-700 px-2 py-1 rounded flex items-center gap-1 animate-pulse">
-                  <Bell className="h-4 w-4 text-yellow-300 fill-yellow-300" />
-                  <span className="text-xs font-bold text-yellow-300">{requests.length}</span>
-                </button>
-              )}
-              
-              {/* زر التبديل بين العام والخاص */}
-              {view === 'public' && (
-                <button onClick={() => setView('private_list')} className="text-xs bg-teal-700 px-2 py-1 rounded">Private</button>
-              )}
-              {view === 'private_list' && (
-                <button onClick={() => setView('public')} className="text-xs bg-teal-700 px-2 py-1 rounded">Public</button>
-              )}
-
-              <button onClick={() => setIsOpen(false)} className="hover:bg-teal-700 p-1 rounded">
+              {/* زر الجرس داخل الهيدر */}
+              <button onClick={() => setShowRequestsMenu(!showRequestsMenu)} className="relative p-1">
+                <Bell className={`h-5 w-5 ${hasNewRequests ? 'text-yellow-300 fill-yellow-300' : 'text-white'}`} />
+                {hasNewRequests && <span className="absolute top-0 right-0 bg-red-500 text-[8px] h-3 w-3 rounded-full flex items-center justify-center">{requests.length}</span>}
+              </button>
+              <button onClick={() => { setIsOpen(false); setActiveChat(null); }} className="hover:bg-teal-700 p-1 rounded">
                 <X className="h-5 w-5" />
               </button>
             </div>
           </div>
 
+          {/* التبويبات (تظهر فقط إذا لم نكن داخل محادثة) */}
+          {!activeChat && (
+            <div className="flex bg-[#0a0a0a] border-b border-gray-800">
+              <button onClick={() => setActiveTab('public')} className={`flex-1 py-2 text-xs font-bold ${activeTab === 'public' ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500'}`}>Public</button>
+              <button onClick={() => setActiveTab('private')} className={`flex-1 py-2 text-xs font-bold ${activeTab === 'private' ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500'}`}>Private</button>
+            </div>
+          )}
+
+          {/* قائمة الطلبات المنسدلة (عند الضغط على الجرس) */}
+          {showRequestsMenu && (
+            <div className="absolute top-14 left-0 w-full bg-[#1a1a1a] border-b border-gray-700 z-50 max-h-48 overflow-y-auto shadow-lg">
+              {requests.length === 0 ? <p className="text-center text-gray-500 text-xs p-4">No requests</p> : null}
+              {requests.map((req) => (
+                <div key={req.id} className="p-3 border-b border-gray-800 flex justify-between items-center">
+                  <span className="text-xs text-white">{req.sender_email.split('@')[0]}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleRequest(req.id, req.sender_email, 'accepted')} className="bg-green-600 text-white px-2 py-1 rounded text-[10px] font-bold">Accept</button>
+                    <button onClick={() => handleRequest(req.id, req.sender_email, 'rejected')} className="bg-red-600 text-white px-2 py-1 rounded text-[10px] font-bold">Reject</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* منطقة المحتوى */}
-          <div className="flex-1 overflow-y-auto bg-[#0a0a0a] flex flex-col [overflow-anchor:none]">
+          <div className="flex-1 p-3 overflow-y-auto flex flex-col gap-3 bg-[#0a0a0a] [overflow-anchor:none]">
             
             {/* 1. الدردشة العامة */}
-            {view === 'public' && (
-              <div className="p-3 flex flex-col gap-3">
-                {publicMessages.map((msg, index) => {
-                  const isMe = msg.user_email === user?.email;
-                  const senderName = isMe ? 'You' : (msg.username || msg.user_email.split('@')[0]);
-                  return (
-                    <div key={index} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <span className={`text-[10px] ${isMe ? 'text-gray-500' : 'text-teal-400 cursor-pointer hover:underline'}`} onClick={() => !isMe && requestChat(msg.user_email)}>
-                          {senderName}
-                        </span>
-                        {isAdmin && !isMe && (
-                          <button onClick={() => banUser(msg.user_email)} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Ban className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-                      <div className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>
-                        {msg.message}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-
-            {/* 2. الطلبات (قبول/رفض) */}
-            {view === 'requests' && (
-              <div className="p-3 flex flex-col gap-3">
-                {requests.length === 0 ? <p className="text-center text-gray-500 text-xs mt-5">No pending requests.</p> : null}
-                {requests.map((req) => (
-                  <div key={req.id} className="bg-gray-800 p-3 rounded-xl border border-gray-700">
-                    <p className="text-xs text-white mb-2">User <strong>{req.sender_email.split('@')[0]}</strong> wants to chat.</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleRequest(req.id, req.sender_email, 'accepted')} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded text-xs font-bold transition-colors">Accept</button>
-                      <button onClick={() => handleRequest(req.id, req.sender_email, 'rejected')} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-1.5 rounded text-xs font-bold transition-colors">Reject</button>
-                    </div>
+            {!activeChat && activeTab === 'public' && publicMessages.map((msg, index) => {
+              const isMe = msg.user_email === user?.email;
+              return (
+                <div key={index} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className={`text-[10px] ${isMe ? 'text-gray-500' : 'text-teal-400 cursor-pointer hover:underline'}`} onClick={() => !isMe && requestChat(msg.user_email)}>
+                      {isMe ? 'You' : (msg.username || msg.user_email.split('@')[0])}
+                    </span>
+                    {isAdmin && !isMe && (
+                      <button onClick={() => banUser(msg.user_email)} className="text-red-500 opacity-0 group-hover:opacity-100"><Ban className="h-3 w-3" /></button>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>{msg.message}</div>
+                </div>
+              );
+            })}
 
-            {/* 3. قائمة المحادثات الخاصة (الأصدقاء) */}
-            {view === 'private_list' && (
+            {/* 2. قائمة الأصدقاء (الخاص) */}
+            {!activeChat && activeTab === 'private' && (
               <div className="flex flex-col">
-                {friends.length === 0 ? <p className="text-center text-gray-500 text-xs mt-10">No friends yet. Send a request from public chat.</p> : null}
+                {friends.length === 0 ? <p className="text-center text-gray-500 text-xs mt-5">No friends yet. Request from public chat.</p> : null}
                 {friends.map((friend, index) => (
-                  <div 
-                    key={index} 
-                    onClick={() => { setActiveChat(friend.email); setView('private_chat'); }}
-                    className="flex items-center gap-3 p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-800/50 transition-colors"
-                  >
-                    {/* الصورة الرمزية */}
-                    <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden shrink-0">
-                      {friend.avatar ? (
-                        <img src={friend.avatar} alt={friend.username} className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="h-6 w-6 text-gray-400" />
-                      )}
-                    </div>
-                    {/* اسم المستخدم */}
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-bold text-white truncate">{friend.username}</h4>
-                      <p className="text-[10px] text-gray-500 truncate">Tap to open chat</p>
-                    </div>
+                  <div key={index} onClick={() => setActiveChat(friend)} className="flex items-center gap-3 p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-800/50">
+                    <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center"><User className="h-5 w-5 text-gray-300" /></div>
+                    <div className="flex-1"><h4 className="text-sm font-bold text-white">{friend.sender_email.split('@')[0]}</h4></div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* 4. المحادثة الخاصة الفعلية */}
-            {view === 'private_chat' && (
-              <div className="p-3 flex flex-col gap-3">
-                {privateMessages.map((msg, index) => {
-                  const isMe = msg.sender_email === user?.email;
-                  return (
-                    <div key={index} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                      <span className="text-[9px] text-gray-500 mb-0.5">{isMe ? 'You' : activeChat?.split('@')[0]}</span>
-                      <div className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>
-                        {msg.message}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
+            {/* 3. المحادثة الخاصة */}
+            {activeChat && privateMessages.map((msg, index) => {
+              const isMe = msg.sender_email === user?.email;
+              return (
+                <div key={index} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  <span className="text-[9px] text-gray-500 mb-0.5">{isMe ? 'You' : activeChat.sender_email.split('@')[0]}</span>
+                  <div className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>{msg.message}</div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* حقل الإرسال (يختفي في الطلبات وقائمة الأصدقاء) */}
-          {(view === 'public' || view === 'private_chat') && (
+          {/* حقل الإرسال */}
+          {(!activeChat || activeChat) && (
             <form onSubmit={sendMessage} className="p-2 bg-[#161616] border-t border-gray-800 flex gap-2 shrink-0">
               <input
                 type="text"
@@ -320,30 +294,18 @@ export default function ChatWidget() {
                 placeholder="Type a message..."
                 className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
               />
-              <button type="submit" className="bg-teal-500 hover:bg-teal-600 text-white p-2 rounded-lg transition-colors">
-                <Send className="h-5 w-5" />
-              </button>
+              <button type="submit" className="bg-teal-500 hover:bg-teal-600 text-white p-2 rounded-lg"><Send className="h-5 w-5" /></button>
             </form>
           )}
         </div>
       )}
 
-      {/* الزر العائم */}
+      {/* الزر العائم الرئيسي (الدردشة) */}
       <button
-        onClick={() => {
-          setIsOpen(!isOpen);
-          if (hasNewRequests && !isOpen) setView('requests');
-        }}
-        className={`relative ${hasNewRequests && !isOpen ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-teal-500 hover:bg-teal-600'} text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105`}
+        onClick={() => { setIsOpen(!isOpen); if (isOpen) setActiveChat(null); }}
+        className="bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105"
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
-        
-        {hasNewRequests && !isOpen && (
-          <span className="absolute -top-1 -right-1 flex h-5 w-5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-5 w-5 bg-yellow-500 border-2 border-[#0a0a0a]"></span>
-          </span>
-        )}
       </button>
     </div>
   );
