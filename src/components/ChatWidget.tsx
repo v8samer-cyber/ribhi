@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User, UserPlus, UserX, ShieldAlert, Trash2 } from 'lucide-react';
+import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User, UserPlus, ShieldAlert, Trash2 } from 'lucide-react';
 import { ProfanityFilter } from "@nzrm/text-shield";
 
 const filter = new ProfanityFilter({ languages: ["en", "ar"] });
@@ -66,14 +66,14 @@ export default function ChatWidget() {
     if (blocks) setBlockedEmails(blocks.map(b => b.blocked_email));
   };
 
-  // 👇 نظام المزامنة الذكية (بديل الـ Realtime) 👇
+  // نظام المزامنة الذكية (بديل الـ Realtime)
   useEffect(() => {
-    fetchData(); // جلب أولي
+    fetchData();
 
     const interval = setInterval(async () => {
       if (!user?.email) return;
 
-      // 1. مزامنة الرسائل العامة (إضافة الجديد فقط دون مسح القديم)
+      // مزامنة الرسائل العامة
       const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
       if (pub) {
         setPublicMessages(prev => {
@@ -82,11 +82,11 @@ export default function ChatWidget() {
         });
       }
 
-      // 2. مزامنة الطلبات
+      // مزامنة الطلبات
       const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
       if (req) setRequests(req);
 
-      // 3. مزامنة المحادثة المفتوحة
+      // مزامنة المحادثة المفتوحة
       if (activeChat) {
         const { data: priv } = await supabase.from('private_messages').select('*')
           .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`)
@@ -99,7 +99,7 @@ export default function ChatWidget() {
           });
         }
       }
-    }, 2000); // يحدث كل ثانيتين
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [user, activeChat]);
@@ -109,7 +109,7 @@ export default function ChatWidget() {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
 
-  // إرسال رسالة
+  // 👇 إرسال رسالة (تم إصلاح الاختفاء) 👇
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
@@ -123,9 +123,29 @@ export default function ChatWidget() {
     setNewMessage('');
 
     if (activeChat) {
-      await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]);
+      // إرسال للخاص
+      const { data, error } = await supabase.from('private_messages').insert([
+        { sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }
+      ]).select();
+
+      if (error) { alert("خطأ في الإرسال: " + error.message); return; }
+      
+      // إضافة الرسالة فوراً للشاشة
+      if (data && data.length > 0) {
+        setPrivateMessages(prev => prev.some(m => m.id === data[0].id) ? prev : [...prev, data[0]]);
+      }
     } else {
-      await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]);
+      // إرسال للعامة
+      const { data, error } = await supabase.from('public_chat').insert([
+        { user_email: user.email, username: user.email.split('@')[0], message: messageToSend }
+      ]).select();
+
+      if (error) { alert("خطأ في الإرسال: " + error.message); return; }
+      
+      // إضافة الرسالة فوراً للشاشة
+      if (data && data.length > 0) {
+        setPublicMessages(prev => prev.some(m => m.id === data[0].id) ? prev : [...prev, data[0]]);
+      }
     }
   };
 
@@ -180,7 +200,6 @@ export default function ChatWidget() {
   return (
     <div className="fixed bottom-20 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
       
-      {/* النوافذ المنبثقة (حظر، حذف، طلب صداقة، محظورين) */}
       {requestPopupUser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
