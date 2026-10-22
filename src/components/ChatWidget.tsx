@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User, UserPlus, Settings, UserX, ShieldAlert } from 'lucide-react';
+import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User, UserPlus, UserX, ShieldAlert } from 'lucide-react';
 import { ProfanityFilter } from "@nzrm/text-shield";
 
 const filter = new ProfanityFilter({ languages: ["en", "ar"] });
@@ -17,7 +17,7 @@ export default function ChatWidget() {
   const [friends, setFriends] = useState<any[]>([]);
   
   const [blockedEmails, setBlockedEmails] = useState<string[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showBlockedList, setShowBlockedList] = useState(false);
   
   const [newMessage, setNewMessage] = useState('');
   const [activeChat, setActiveChat] = useState<any | null>(null); 
@@ -26,12 +26,9 @@ export default function ChatWidget() {
   const [requestPopupUser, setRequestPopupUser] = useState<any | null>(null); 
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const isAdmin = user?.email === "v8samer@gmail.com";
 
-  const keepLast50 = (msgs: any[]) => msgs.slice(-50);
-
-  // 1. جلب البيانات الأولية
-  const fetchInitialData = async () => {
+  // دالة لجلب البيانات
+  const fetchData = async () => {
     if (!user?.email) return;
     
     const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
@@ -56,45 +53,56 @@ export default function ChatWidget() {
       setFriends(uniqueFriends);
     }
 
-    // 👇 جلب آخر 10 أشخاص محظورين فقط (حسب التاريخ)
     const { data: blocks } = await supabase
       .from('user_blocks')
       .select('blocked_email')
       .eq('blocker_email', user.email)
-      .order('created_at', { ascending: false }) // الأحدث أولاً
-      .limit(10); // حد أقصى 10
+      .order('created_at', { ascending: false });
       
     if (blocks) setBlockedEmails(blocks.map(b => b.blocked_email));
   };
 
   useEffect(() => {
-    fetchInitialData();
+    fetchData();
   }, [user]);
 
-  // 2. الاستماع للرسائل الحية (Realtime)
+  // 👇👇 [هام جداً] الاستماع اللحظي مع معالجة الأخطاء وإعادة الاتصال 👇👇
   useEffect(() => {
     if (!user?.email) return;
 
-    const uniqueId = Math.random().toString(36).substring(7);
-
-    const publicChannel = supabase.channel(`public_${uniqueId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'public_chat' }, (payload) => {
-        setPublicMessages((prev) => {
-          if (prev.some(m => m.id === payload.new.id)) return prev;
-          return keepLast50([...prev, payload.new]);
-        });
-      }).subscribe();
-
-    const requestsChannel = supabase.channel(`requests_${uniqueId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_requests' }, (payload) => {
-        const newData = payload.new as any;
-        if (payload.eventType === 'INSERT' && newData?.receiver_email === user.email && newData?.status === 'pending') {
-          setRequests(prev => [...prev, newData]);
+    // قناة الدردشة العامة
+    const publicChannel = supabase.channel('realtime_public_chat')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'public_chat' },
+        (payload) => {
+          setPublicMessages((prev) => {
+            if (prev.some(m => m.id === payload.new.id)) return prev;
+            return [...prev, payload.new].slice(-50);
+          });
         }
-        if (payload.eventType === 'UPDATE' && newData?.status === 'accepted') {
-          fetchInitialData(); 
+      )
+      .subscribe((status, err) => {
+        if (err) console.error('Public Channel Error:', err);
+        console.log('Public Channel Status:', status);
+      });
+
+    // قناة الطلبات
+    const requestsChannel = supabase.channel('realtime_requests')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_requests' },
+        (payload) => {
+          const newData = payload.new as any;
+          if (payload.eventType === 'INSERT' && newData?.receiver_email === user.email && newData?.status === 'pending') {
+            setRequests(prev => [...prev, newData]);
+          }
+          if (payload.eventType === 'UPDATE' && newData?.status === 'accepted') {
+            fetchData();
+          }
         }
-      }).subscribe();
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(publicChannel);
@@ -102,35 +110,39 @@ export default function ChatWidget() {
     };
   }, [user]);
 
-  // 3. الاستماع للرسائل الخاصة
+  // قناة الرسائل الخاصة
   useEffect(() => {
     if (!activeChat || !user?.email) return;
 
     const fetchPrivate = async () => {
       const { data } = await supabase.from('private_messages').select('*')
         .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`)
-        .order('created_at', { ascending: true })
-        .limit(50);
+        .order('created_at', { ascending: true }).limit(50);
       if (data) setPrivateMessages(data);
     };
     fetchPrivate();
 
-    const uniqueId = Math.random().toString(36).substring(7);
-    const privateChannel = supabase.channel(`private_${activeChat.email}_${uniqueId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
-        const msg = payload.new as any;
-        if ((msg.sender_email === user.email && msg.receiver_email === activeChat.email) || 
-            (msg.sender_email === activeChat.email && msg.receiver_email === user.email)) {
-          setPrivateMessages((prev) => {
-            if (prev.some(m => m.id === msg.id)) return prev;
-            return keepLast50([...prev, msg]);
-          });
+    const privateChannel = supabase.channel(`realtime_private_${activeChat.email}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'private_messages' },
+        (payload) => {
+          const msg = payload.new as any;
+          if ((msg.sender_email === user.email && msg.receiver_email === activeChat.email) || 
+              (msg.sender_email === activeChat.email && msg.receiver_email === user.email)) {
+            setPrivateMessages((prev) => {
+              if (prev.some(m => m.id === msg.id)) return prev;
+              return [...prev, msg].slice(-50);
+            });
+          }
         }
-      }).subscribe();
+      )
+      .subscribe();
 
     return () => { supabase.removeChannel(privateChannel); };
   }, [activeChat, user]);
 
+  // النزول التلقائي لآخر رسالة
   useEffect(() => {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
@@ -149,12 +161,8 @@ export default function ChatWidget() {
     setNewMessage('');
 
     if (activeChat) {
-      const tempMsg = { id: Date.now(), sender_email: user.email, receiver_email: activeChat.email, message: messageToSend, created_at: new Date().toISOString() };
-      setPrivateMessages(prev => keepLast50([...prev, tempMsg]));
       await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]);
     } else {
-      const tempMsg = { id: Date.now(), user_email: user.email, username: user.email.split('@')[0], message: messageToSend, created_at: new Date().toISOString() };
-      setPublicMessages(prev => keepLast50([...prev, tempMsg]));
       await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]);
     }
   };
@@ -173,8 +181,7 @@ export default function ChatWidget() {
     const { error } = await supabase.from('user_blocks').insert([{ blocker_email: user.email, blocked_email: emailToBlock }]);
     if (!error) {
       setBlockedEmails(prev => [...prev, emailToBlock]);
-      setRequestPopupUser(null);
-      if (activeChat?.email === emailToBlock) setActiveChat(null);
+      setActiveChat(null);
     }
   };
 
@@ -184,20 +191,13 @@ export default function ChatWidget() {
     setBlockedEmails(prev => prev.filter(e => e !== emailToUnblock));
   };
 
+  // قبول الطلبات
   const handleRequest = async (id: number, senderEmail: string, status: 'accepted' | 'rejected') => {
     await supabase.from('chat_requests').update({ status }).eq('id', id);
     setRequests(prev => prev.filter(r => r.id !== id));
     if (status === 'accepted') {
-      fetchInitialData();
+      fetchData();
       setActiveTab('private');
-    }
-  };
-
-  const banUser = async (emailToBan: string) => {
-    if (!isAdmin) return;
-    if (window.confirm(`حظر ${emailToBan} نهائياً من الموقع؟`)) {
-      await supabase.from('banned_users').insert([{ email: emailToBan }]);
-      setPublicMessages(prev => prev.filter(m => m.user_email !== emailToBan));
     }
   };
 
@@ -208,7 +208,7 @@ export default function ChatWidget() {
   return (
     <div className="fixed bottom-20 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
       
-      {/* 1. نافذة طلب الصداقة + الحظر */}
+      {/* نافذة طلب الصداقة */}
       {requestPopupUser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
@@ -216,26 +216,20 @@ export default function ChatWidget() {
               <User className="h-6 w-6 text-gray-300" />
             </div>
             <h4 className="text-white font-bold mb-4">{requestPopupUser.username}</h4>
-            
-            <button onClick={sendFriendRequest} className="w-full bg-teal-500 hover:bg-teal-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 mb-2">
+            <button onClick={sendFriendRequest} className="w-full bg-teal-500 hover:bg-teal-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2">
               <UserPlus className="h-4 w-4" /> Send Request
-            </button>
-            
-            <button onClick={() => blockUser(requestPopupUser.email)} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2">
-              <UserX className="h-4 w-4" /> Block User
             </button>
           </div>
         </div>
       )}
 
-      {/* 2. نافذة إعدادات الحظر (المحظورين) */}
-      {showSettings && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowSettings(false)}>
+      {/* قائمة المحظورين */}
+      {showBlockedList && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockedList(false)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl w-[80vw] sm:w-72 max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-white font-bold mb-4 flex items-center gap-2 border-b border-gray-700 pb-2">
-              <Ban className="h-5 w-5 text-red-500" /> Blocked Users (Last 10)
+              <ShieldAlert className="h-5 w-5 text-red-500" /> Blocked Users
             </h3>
-            
             <div className="flex-1 overflow-y-auto min-h-0">
               {blockedEmails.length === 0 ? (
                 <p className="text-gray-500 text-xs text-center py-4">No blocked users.</p>
@@ -250,16 +244,34 @@ export default function ChatWidget() {
                 ))
               )}
             </div>
-            
-            <button onClick={() => setShowSettings(false)} className="mt-4 w-full bg-gray-700 text-white py-2 rounded text-xs">Close</button>
+            <button onClick={() => setShowBlockedList(false)} className="mt-4 w-full bg-gray-700 text-white py-2 rounded text-xs">Close</button>
           </div>
         </div>
       )}
 
-      {hasNewRequests && !isOpen && (
-        <button onClick={() => { setIsOpen(true); setShowRequestsMenu(true); }} className="mb-4 mr-4 bg-yellow-500 text-white p-3 rounded-full shadow-lg animate-bounce pointer-events-auto">
-          <Bell className="h-6 w-6" />
-        </button>
+      {/* نافذة الإشعارات */}
+      {showRequestsMenu && (
+        <>
+          <div className="fixed inset-0 z-40 pointer-events-auto" onClick={() => setShowRequestsMenu(false)}></div>
+          <div className="absolute bottom-[70px] right-4 w-[300px] sm:w-[380px] bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden pointer-events-auto">
+            <div className="p-3 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+              <h3 className="text-white font-bold text-sm">Chat Requests</h3>
+              <button onClick={() => setShowRequestsMenu(false)} className="text-gray-400 hover:text-white"><X className="h-4 w-4"/></button>
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {requests.length === 0 ? <p className="text-center text-gray-500 text-xs p-4">No requests</p> : null}
+              {requests.map((req) => (
+                <div key={req.id} className="p-3 border-b border-gray-800 flex justify-between items-center">
+                  <span className="text-xs text-white">{req.sender_email.split('@')[0]}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleRequest(req.id, req.sender_email, 'accepted')} className="bg-green-600 text-white px-2 py-1 rounded text-[10px] font-bold">Accept</button>
+                    <button onClick={() => handleRequest(req.id, req.sender_email, 'rejected')} className="bg-red-600 text-white px-2 py-1 rounded text-[10px] font-bold">Reject</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {isOpen && (
@@ -278,15 +290,15 @@ export default function ChatWidget() {
             </div>
             
             <div className="flex gap-2 items-center">
-              {/* 👇 زر الحظر 🚯 في الأعلى (يظهر دائماً لإدارة المحظورين) 👇 */}
-              <button onClick={() => setShowSettings(true)} className="hover:bg-teal-700 p-1 rounded text-red-200" title="Blocked Users">
-                <Ban className="h-5 w-5" />
-              </button>
-
-              {/* زر حظر الصديق (يظهر فقط عند فتح محادثة خاصة) */}
               {activeChat && (
-                <button onClick={() => blockUser(activeChat.email)} className="hover:bg-teal-700 p-1 rounded text-red-300" title="Block this user">
-                  <UserX className="h-5 w-5" />
+                <button onClick={() => blockUser(activeChat.email)} className="hover:bg-teal-700 p-1 rounded text-red-200" title="Block this user">
+                  <Ban className="h-5 w-5" />
+                </button>
+              )}
+
+              {!activeChat && activeTab === 'private' && (
+                <button onClick={() => setShowBlockedList(true)} className="hover:bg-teal-700 p-1 rounded text-red-200">
+                  <ShieldAlert className="h-5 w-5" />
                 </button>
               )}
 
@@ -307,24 +319,7 @@ export default function ChatWidget() {
             </div>
           )}
 
-          {showRequestsMenu && (
-            <div className="absolute top-14 left-0 w-full bg-[#1a1a1a] border-b border-gray-700 z-50 max-h-48 overflow-y-auto shadow-lg">
-              {requests.length === 0 ? <p className="text-center text-gray-500 text-xs p-4">No requests</p> : null}
-              {requests.map((req) => (
-                <div key={req.id} className="p-3 border-b border-gray-800 flex justify-between items-center">
-                  <span className="text-xs text-white">{req.sender_email.split('@')[0]}</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => handleRequest(req.id, req.sender_email, 'accepted')} className="bg-green-600 text-white px-2 py-1 rounded text-[10px] font-bold">Accept</button>
-                    <button onClick={() => handleRequest(req.id, req.sender_email, 'rejected')} className="bg-red-600 text-white px-2 py-1 rounded text-[10px] font-bold">Reject</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div className="flex-1 min-h-0 p-3 overflow-y-auto flex flex-col gap-3 bg-[#0a0a0a] [overflow-anchor:none]">
-            
-            {/* الدردشة العامة */}
             {!activeChat && activeTab === 'public' && visiblePublicMessages.map((msg, index) => {
               const isMe = msg.user_email === user?.email;
               const username = msg.username || msg.user_email.split('@')[0];
@@ -334,21 +329,17 @@ export default function ChatWidget() {
                     <span className={`text-[11px] font-medium ${isMe ? 'text-gray-500' : 'text-gray-400'}`}>
                       {isMe ? 'You' : username}
                     </span>
-                    
                     {!isMe && (
                       <button onClick={() => setRequestPopupUser({ email: msg.user_email, username })} className="text-teal-400 hover:text-teal-300 p-0.5">
                         <User className="h-4 w-4" />
                       </button>
                     )}
-
-                    {isAdmin && !isMe && <button onClick={() => banUser(msg.user_email)} className="text-red-500 opacity-0 group-hover:opacity-100"><Ban className="h-4 w-4" /></button>}
                   </div>
                   <div className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>{msg.message}</div>
                 </div>
               );
             })}
 
-            {/* قائمة الأصدقاء */}
             {!activeChat && activeTab === 'private' && (
               <div className="flex flex-col">
                 {visibleFriends.length === 0 ? <p className="text-center text-gray-500 text-xs mt-5">No friends yet.</p> : null}
@@ -361,7 +352,6 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {/* الدردشة الخاصة */}
             {activeChat && privateMessages.map((msg, index) => {
               const isMe = msg.sender_email === user?.email;
               return (
