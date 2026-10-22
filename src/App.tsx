@@ -11,6 +11,7 @@ import Affiliates from '@/pages/Affiliates';
 import Profile from '@/pages/Profile';
 import TasksHistory from '@/pages/TasksHistory';
 import Admin from '@/pages/Admin';
+import ChatWidget from '@/components/ChatWidget'; // 👈 1. استيراد الدردشة
 
 function Pages() {
   const { page, user } = useApp();
@@ -33,7 +34,7 @@ function Pages() {
 }
 
 function Shell() {
-  const { page } = useApp();
+  const { page, user } = useApp(); // 👈 2. أضفنا user هنا لكي نعرف هل المستخدم مسجل دخول أم لا
   const isAdminPage = page === 'admin';
   const showNav = !isAdminPage;
 
@@ -44,6 +45,10 @@ function Shell() {
         <Pages />
       </main>
       {showNav && <BottomNav />}
+      
+      {/* 👇 3. إضافة الدردشة (تظهر فقط إذا كان المستخدم مسجل دخول وليس في صفحة الأدمن) */}
+      {showNav && user && <ChatWidget />}
+      
     </div>
   );
 }
