@@ -31,16 +31,19 @@ export default function ChatWidget() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // دالة جلب البيانات الأساسية
+  // دالة جلب البيانات (تستخدم في البداية وفي التحديث التلقائي)
   const fetchData = async () => {
     if (!user?.email) return;
     
+    // جلب الرسائل العامة
     const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
     if (pub) setPublicMessages(pub);
 
+    // جلب الطلبات
     const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
     if (req) setRequests(req);
 
+    // جلب الأصدقاء
     const { data: friendData } = await supabase
       .from('chat_requests')
       .select('*')
@@ -57,47 +60,32 @@ export default function ChatWidget() {
       setFriends(uniqueFriends);
     }
 
-    const { data: blocks } = await supabase
-      .from('user_blocks')
-      .select('blocked_email')
-      .eq('blocker_email', user.email)
-      .order('created_at', { ascending: false })
-      .limit(10); 
+    // جلب المحظورين
+    const { data: blocks } = await supabase.from('user_blocks').select('blocked_email').eq('blocker_email', user.email).order('created_at', { ascending: false }).limit(10); 
     if (blocks) setBlockedEmails(blocks.map(b => b.blocked_email));
   };
 
-  // نظام المزامنة الذكية (بديل الـ Realtime)
+  // نظام التحديث التلقائي (كل ثانيتين) لضمان وصول الرسائل
   useEffect(() => {
     fetchData();
 
     const interval = setInterval(async () => {
       if (!user?.email) return;
 
-      // مزامنة الرسائل العامة
+      // تحديث الرسائل العامة
       const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
-      if (pub) {
-        setPublicMessages(prev => {
-          const newMsgs = pub.filter(p => !prev.some(m => m.id === p.id));
-          return newMsgs.length > 0 ? [...prev, ...newMsgs].slice(-50) : prev;
-        });
-      }
+      if (pub) setPublicMessages(pub); // نستبدل القائمة كاملة بالرسائل المخزنة لضمان عدم وجود أخطاء
 
-      // مزامنة الطلبات
+      // تحديث الطلبات
       const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
       if (req) setRequests(req);
 
-      // مزامنة المحادثة المفتوحة
+      // تحديث الرسائل الخاصة
       if (activeChat) {
         const { data: priv } = await supabase.from('private_messages').select('*')
           .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`)
           .order('created_at', { ascending: true }).limit(50);
-        
-        if (priv) {
-          setPrivateMessages(prev => {
-            const newMsgs = priv.filter(p => !prev.some(m => m.id === p.id));
-            return newMsgs.length > 0 ? [...prev, ...newMsgs].slice(-50) : prev;
-          });
-        }
+        if (priv) setPrivateMessages(priv);
       }
     }, 2000);
 
@@ -109,7 +97,7 @@ export default function ChatWidget() {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
 
-  // 👇 إرسال رسالة (تم إصلاح الاختفاء) 👇
+  // إرسال رسالة مع التنبيه في حال الخطأ
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
@@ -123,36 +111,21 @@ export default function ChatWidget() {
     setNewMessage('');
 
     if (activeChat) {
-      // إرسال للخاص
-      const { data, error } = await supabase.from('private_messages').insert([
-        { sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }
-      ]).select();
-
-      if (error) { alert("خطأ في الإرسال: " + error.message); return; }
-      
-      // إضافة الرسالة فوراً للشاشة
-      if (data && data.length > 0) {
-        setPrivateMessages(prev => prev.some(m => m.id === data[0].id) ? prev : [...prev, data[0]]);
-      }
+      const { error } = await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]);
+      if (error) alert("خطأ في حفظ الرسالة: " + error.message);
+      else fetchData(); // جلب فوري
     } else {
-      // إرسال للعامة
-      const { data, error } = await supabase.from('public_chat').insert([
-        { user_email: user.email, username: user.email.split('@')[0], message: messageToSend }
-      ]).select();
-
-      if (error) { alert("خطأ في الإرسال: " + error.message); return; }
-      
-      // إضافة الرسالة فوراً للشاشة
-      if (data && data.length > 0) {
-        setPublicMessages(prev => prev.some(m => m.id === data[0].id) ? prev : [...prev, data[0]]);
-      }
+      const { error } = await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]);
+      if (error) alert("خطأ في حفظ الرسالة: " + error.message);
+      else fetchData(); // جلب فوري
     }
   };
 
   const sendFriendRequest = async () => {
     if (!requestPopupUser) return;
-    await supabase.from('chat_requests').insert([{ sender_email: user.email, receiver_email: requestPopupUser.email, status: 'pending' }]);
-    alert(`تم إرسال طلب إلى ${requestPopupUser.username}`);
+    const { error } = await supabase.from('chat_requests').insert([{ sender_email: user.email, receiver_email: requestPopupUser.email, status: 'pending' }]);
+    if (error) alert(error.message);
+    else alert(`تم إرسال طلب إلى ${requestPopupUser.username}`);
     setRequestPopupUser(null);
   };
 
@@ -164,7 +137,7 @@ export default function ChatWidget() {
       setShowBlockConfirm(false);
       setActiveChat(null);
     } else {
-      alert("حدث خطأ أثناء الحظر");
+      alert("حدث خطأ أثناء الحظر: " + error.message);
     }
   };
 
