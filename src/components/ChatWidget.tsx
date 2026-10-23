@@ -15,7 +15,7 @@ const translations = {
     sendRequest: 'Send Request', noRequests: 'No requests', noFriends: 'No friends yet.',
     noBlocked: 'No blocked users.', blockedReason: 'You have been blocked (Not sent)',
     iBlockedReason: 'You blocked this user (Not sent)', you: 'You', blockConfirm: 'Block',
-    blockConfirmMsg: 'Are you sure you want to block', linkError: 'Links are not allowed in chat!'
+    blockConfirmMsg: 'Are you sure you want to block'
   },
   ar: {
     publicChat: 'الدردشة العامة', myFriends: 'أصدقائي', public: 'عام', private: 'خاص',
@@ -25,7 +25,7 @@ const translations = {
     sendRequest: 'إرسال طلب', noRequests: 'لا توجد طلبات', noFriends: 'لا يوجد أصدقاء بعد.',
     noBlocked: 'لا يوجد محظورين.', blockedReason: 'تم حظرك (لم يتم الإرسال)',
     iBlockedReason: 'أنت حظرت هذا المستخدم (لم يتم الإرسال)', you: 'أنت', blockConfirm: 'حظر',
-    blockConfirmMsg: 'هل أنت متأكد من حظر', linkError: 'غير مسموح بإرسال الروابط في الدردشة!'
+    blockConfirmMsg: 'هل أنت متأكد من حظر'
   }
 };
 
@@ -56,7 +56,9 @@ export default function ChatWidget() {
   const [showRequestsMenu, setShowRequestsMenu] = useState(false);
   const [requestPopupUser, setRequestPopupUser] = useState<any | null>(null); 
   
+  // 👇 حالات الإشعارات والنقاط 👇
   const [hasUnreadPrivate, setHasUnreadPrivate] = useState(false);
+  const [unreadSenders, setUnreadSenders] = useState<{[key: string]: boolean}>({});
   const lastReadPrivateRef = useRef<string>(new Date(0).toISOString());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -90,7 +92,7 @@ export default function ChatWidget() {
     if (blocksBy) setBlockedByEmails(blocksBy.map(b => b.blocker_email));
   };
 
-  // 👇 نظام الدمج الذكي (يمنع اختفاء الرسائل نهائياً) 👇
+  // 👇 المزامنة الذكية (تبحث عن الرسائل الجديدة وتضع النقاط) 👇
   useEffect(() => {
     fetchData();
 
@@ -100,68 +102,69 @@ export default function ChatWidget() {
       const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
       if (req) setRequests(prev => JSON.stringify(prev) !== JSON.stringify(req) ? req : prev);
 
-      // دمج الرسائل العامة
       if (!activeChat) {
         const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
-        if (pub) {
-          setPublicMessages(prev => {
-            // نحتفظ بالرسائل المؤقتة التي لم تحفظ بعد
-            const tempMsgs = prev.filter(m => m.id.toString().startsWith('temp-'));
-            const merged = [...pub];
-            tempMsgs.forEach(tm => {
-              if (!pub.some(p => p.message === tm.message && p.user_email === tm.user_email)) merged.push(tm);
-            });
-            return merged.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
-          });
-        }
+        if (pub) setPublicMessages(prev => {
+          const temp = prev.filter(m => String(m.id).startsWith('temp-'));
+          return [...pub, ...temp].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
+        });
       } else {
-        // دمج الرسائل الخاصة
         const { data: priv } = await supabase.from('private_messages').select('*').or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`).order('created_at', { ascending: true }).limit(50);
-        if (priv) {
-          setPrivateMessages(prev => {
-            const tempMsgs = prev.filter(m => m.id.toString().startsWith('temp-'));
-            const merged = [...priv];
-            tempMsgs.forEach(tm => {
-              if (!priv.some(p => p.message === tm.message && p.sender_email === tm.sender_email)) merged.push(tm);
-            });
-            return merged.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
-          });
-        }
+        if (priv) setPrivateMessages(prev => {
+          const temp = prev.filter(m => String(m.id).startsWith('temp-'));
+          return [...priv, ...temp].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
+        });
       }
 
-      if (!isOpen) {
-        const { data: latestPrivate } = await supabase.from('private_messages').select('created_at').eq('receiver_email', user.email).order('created_at', { ascending: false }).limit(1);
+      // فحص الرسائل الجديدة لوضع النقاط الحمراء
+      if (!isOpen || activeTab !== 'private' || !activeChat) {
+        const { data: latestPrivate } = await supabase
+          .from('private_messages')
+          .select('sender_email, created_at')
+          .eq('receiver_email', user.email)
+          .order('created_at', { ascending: false })
+          .limit(5); // نفحص آخر 5 رسائل
+
         if (latestPrivate && latestPrivate.length > 0) {
-          const latestTime = latestPrivate[0].created_at;
-          if (latestTime > lastReadPrivateRef.current) setHasUnreadPrivate(true);
+          let newUnread = false;
+          const newSenders = { ...unreadSenders };
+          
+          latestPrivate.forEach(msg => {
+            if (msg.created_at > lastReadPrivateRef.current) {
+              // إذا كانت الرسالة لم تُقرأ بعد (وليس مني)
+              if (msg.sender_email !== user.email) {
+                newSenders[msg.sender_email] = true;
+                newUnread = true;
+              }
+            }
+          });
+          
+          setHasUnreadPrivate(newUnread);
+          setUnreadSenders(newSenders);
         }
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [user, activeChat, isOpen]);
+  }, [user, activeChat, isOpen, activeTab, unreadSenders]);
 
+  // مسح الإشعارات عند الدخول للخاص
   useEffect(() => {
-    if (isOpen && activeTab === 'private') {
+    if (isOpen && activeTab === 'private' && !activeChat) {
+      // إذا دخل القائمة بدون فتح محادثة، نمسح شارة "الرسائل الخاصة"
       setHasUnreadPrivate(false);
       lastReadPrivateRef.current = new Date().toISOString();
     }
-  }, [isOpen, activeTab]);
+  }, [isOpen, activeTab, activeChat]);
 
   useEffect(() => {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
 
-  // 👇 دالة الإرسال السريع والآمن 👇
+  // 👇 إرسال الرسائل (فوري 100% بدون تأخير) 👇
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
-
-    const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.(com|net|org|io|xyz|info|me|tv|cc|co|app|dev|link|online|site|store|shop|club|live|top|vip|fun|website|space|tech|gov|edu))/gi;
-    if (urlRegex.test(newMessage)) {
-      alert(t.linkError);
-      return; 
-    }
 
     const messageToSend = filter.clean(newMessage);
     setNewMessage('');
@@ -182,7 +185,7 @@ export default function ChatWidget() {
 
       const tempId = `temp-${Date.now()}`;
       const tempMsg = { id: tempId, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend, created_at: new Date().toISOString() };
-      setPrivateMessages(prev => [...prev, tempMsg]);
+      setPrivateMessages(prev => [...prev, tempMsg]); // تظهر فوراً
 
       const { data, error } = await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]).select();
       
@@ -190,12 +193,12 @@ export default function ChatWidget() {
         alert("Error: " + error.message);
         setPrivateMessages(prev => prev.filter(m => m.id !== tempId)); 
       } else if (data) {
-        setPrivateMessages(prev => prev.map(m => m.id === tempId ? data[0] : m));
+        setPrivateMessages(prev => prev.map(m => m.id === tempId ? data[0] : m)); // استبدال المؤقت بالحقيقي
       }
     } else {
       const tempId = `temp-${Date.now()}`;
       const tempMsg = { id: tempId, user_email: user.email, username: user.email.split('@')[0], message: messageToSend, created_at: new Date().toISOString() };
-      setPublicMessages(prev => [...prev, tempMsg]);
+      setPublicMessages(prev => [...prev, tempMsg]); // تظهر فوراً
 
       const { data, error } = await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]).select();
       
@@ -203,9 +206,15 @@ export default function ChatWidget() {
         alert("Error: " + error.message);
         setPublicMessages(prev => prev.filter(m => m.id !== tempId)); 
       } else if (data) {
-        setPublicMessages(prev => prev.map(m => m.id === tempId ? data[0] : m));
+        setPublicMessages(prev => prev.map(m => m.id === tempId ? data[0] : m)); // استبدال المؤقت بالحقيقي
       }
     }
+  };
+
+  // دالة فتح محادثة (تمسح النقطة الحمراء)
+  const openChat = (friend: any) => {
+    setActiveChat(friend);
+    setUnreadSenders(prev => ({ ...prev, [friend.email]: false })); // إزالة النقطة
   };
 
   const sendFriendRequest = async () => {
@@ -246,6 +255,7 @@ export default function ChatWidget() {
   const handlePressEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
 
   const hasNewRequests = requests.length > 0;
+  // يظهر الشعار إذا كان هناك طلب صداقة أو رسالة خاصة جديدة
   const showYellowBadge = !isOpen && (hasNewRequests || hasUnreadPrivate);
 
   const visiblePublicMessages = publicMessages.filter(m => !blockedEmails.includes(m.user_email));
@@ -405,18 +415,27 @@ export default function ChatWidget() {
             {!activeChat && activeTab === 'private' && (
               <div className="flex flex-col select-none">
                 {visibleFriends.length === 0 ? <p className="text-center text-gray-500 text-xs mt-5">{t.noFriends}</p> : null}
-                {visibleFriends.map((friend, index) => (
-                  <div 
-                    key={index} 
-                    onMouseDown={() => handlePressStart(friend)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
-                    onTouchStart={() => handlePressStart(friend)} onTouchEnd={handlePressEnd}
-                    onClick={() => setActiveChat(friend)} 
-                    className="flex items-center gap-3 p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-800/50 active:bg-gray-700"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center"><User className="h-5 w-5 text-gray-300" /></div>
-                    <div className="flex-1"><h4 className="text-sm font-bold text-white">{friend.username}</h4></div>
-                  </div>
-                ))}
+                {visibleFriends.map((friend, index) => {
+                  const hasUnread = unreadSenders[friend.email];
+                  return (
+                    <div 
+                      key={index} 
+                      onMouseDown={() => handlePressStart(friend)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
+                      onTouchStart={() => handlePressStart(friend)} onTouchEnd={handlePressEnd}
+                      onClick={() => openChat(friend)} 
+                      className="flex items-center gap-3 p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-800/50 active:bg-gray-700 relative"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center relative">
+                        <User className="h-5 w-5 text-gray-300" />
+                        {/* 👇 النقطة الحمراء الصغيرة تظهر هنا 👇 */}
+                        {hasUnread && (
+                          <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-[#0a0a0a] rounded-full"></span>
+                        )}
+                      </div>
+                      <div className="flex-1"><h4 className="text-sm font-bold text-white">{friend.username}</h4></div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -447,15 +466,512 @@ export default function ChatWidget() {
             <div ref={messagesEndRef} />
           </div>
 
-          <form onSubmit={sendMessage} className="p-2 bg-[#161616] border-t border-gray-800 flex gap-2 shrink-0">
-            <input type="text" dir="auto" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={t.typeMessage} className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"/>
-            <button type="submit" className="bg-teal-500 hover:bg-teal-600 text-white p-2 rounded-lg"><Send className="h-5 w-5" /></button>
-          </form>
+          {(activeChat || (!activeChat && activeTab === 'public')) && (
+            <form onSubmit={sendMessage} className="p-2 bg-[#161616] border-t border-gray-800 flex gap-2 shrink-0">
+              <input type="text" dir="auto" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={t.typeMessage} className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"/>
+              <button type="submit" className="bg-teal-500 hover:bg-teal-600 text-white p-2 rounded-lg"><Send className="h-5 w-5" /></button>
+            </form>
+          )}
         </div>
       )}
 
       <button 
-        onClick={() => { setIsOpen(!isOpen); }} 
+        onClick={() => { 
+          setIsOpen(!isOpen); 
+          if (!isOpen && (hasUnreadPrivate || hasNewRequests)) {
+            setActiveTab('private'); // 👈 الذهاب مباشرة للخاص
+          }
+        }} 
+        className={`bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 mr-4 pointer-events-auto relative ${showYellowBadge ? 'animate-pulse' : ''}`}
+      >
+        {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        
+        {showYellowBadge && !isOpen && (
+          <span className="absolute -top-1 -right-1 flex h-5 w-5">
+            <span className="animate-pinimport { useState, useEffect, useRef } from 'react';
+import { useApp } from '@/context/AppContext';
+import { supabase } from '@/lib/supabase';
+import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User, UserPlus, ShieldAlert, Trash2 } from 'lucide-react';
+import { ProfanityFilter } from "@nzrm/text-shield";
+
+const filter = new ProfanityFilter({ languages: ["en", "ar"] });
+
+const translations = {
+  en: {
+    publicChat: 'Public Chat', myFriends: 'My Friends', public: 'Public', private: 'Private',
+    chatWith: 'Chat with', typeMessage: 'Type a message...', cancel: 'Cancel', block: 'Block',
+    delete: 'Delete', deleteFriend: 'Delete', blockedList: 'Blocked (Last 10)', unblock: 'Unblock',
+    close: 'Close', chatRequests: 'Chat Requests', accept: 'Accept', reject: 'Reject',
+    sendRequest: 'Send Request', noRequests: 'No requests', noFriends: 'No friends yet.',
+    noBlocked: 'No blocked users.', blockedReason: 'You have been blocked (Not sent)',
+    iBlockedReason: 'You blocked this user (Not sent)', you: 'You', blockConfirm: 'Block',
+    blockConfirmMsg: 'Are you sure you want to block'
+  },
+  ar: {
+    publicChat: 'الدردشة العامة', myFriends: 'أصدقائي', public: 'عام', private: 'خاص',
+    chatWith: 'محادثة مع', typeMessage: 'اكتب رسالة...', cancel: 'إلغاء', block: 'حظر',
+    delete: 'حذف', deleteFriend: 'حذف الصديق', blockedList: 'المحظورين (آخر 10)', unblock: 'إلغاء الحظر',
+    close: 'إغلاق', chatRequests: 'طلبات الدردشة', accept: 'قبول', reject: 'رفض',
+    sendRequest: 'إرسال طلب', noRequests: 'لا توجد طلبات', noFriends: 'لا يوجد أصدقاء بعد.',
+    noBlocked: 'لا يوجد محظورين.', blockedReason: 'تم حظرك (لم يتم الإرسال)',
+    iBlockedReason: 'أنت حظرت هذا المستخدم (لم يتم الإرسال)', you: 'أنت', blockConfirm: 'حظر',
+    blockConfirmMsg: 'هل أنت متأكد من حظر'
+  }
+};
+
+export default function ChatWidget() {
+  const { user } = useApp();
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'public' | 'private'>('public');
+  const [lang, setLang] = useState<'en' | 'ar'>('en');
+  const t = translations[lang];
+
+  const [publicMessages, setPublicMessages] = useState<any[]>([]);
+  const [privateMessages, setPrivateMessages] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [friends, setFriends] = useState<any[]>([]);
+  
+  const [blockedEmails, setBlockedEmails] = useState<string[]>([]);
+  const [blockedByEmails, setBlockedByEmails] = useState<string[]>([]); 
+  
+  const [showBlockedList, setShowBlockedList] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false); 
+  
+  const [friendToDelete, setFriendToDelete] = useState<any | null>(null); 
+  const pressTimer = useRef<any>(null); 
+  
+  const [newMessage, setNewMessage] = useState('');
+  const [activeChat, setActiveChat] = useState<any | null>(null); 
+  
+  const [showRequestsMenu, setShowRequestsMenu] = useState(false);
+  const [requestPopupUser, setRequestPopupUser] = useState<any | null>(null); 
+  
+  // 👇 حالات الإشعارات والنقاط 👇
+  const [hasUnreadPrivate, setHasUnreadPrivate] = useState(false);
+  const [unreadSenders, setUnreadSenders] = useState<{[key: string]: boolean}>({});
+  const lastReadPrivateRef = useRef<string>(new Date(0).toISOString());
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchData = async () => {
+    if (!user?.email) return;
+    
+    const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
+    if (pub) setPublicMessages(pub);
+
+    const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
+    if (req) setRequests(req);
+
+    const { data: friendData } = await supabase
+      .from('chat_requests').select('*').or(`receiver_email.eq.${user.email},sender_email.eq.${user.email}`).eq('status', 'accepted');
+
+    if (friendData) {
+      const formattedFriends = friendData.map(row => {
+        const isReceiver = row.receiver_email === user.email;
+        const otherEmail = isReceiver ? row.sender_email : row.receiver_email;
+        return { id: row.id, email: otherEmail, username: otherEmail.split('@')[0] };
+      });
+      const uniqueFriends = Array.from(new Map(formattedFriends.map(item => [item.email, item])).values());
+      setFriends(uniqueFriends);
+    }
+
+    const { data: blocks } = await supabase.from('user_blocks').select('blocked_email').eq('blocker_email', user.email).order('created_at', { ascending: false }).limit(10); 
+    if (blocks) setBlockedEmails(blocks.map(b => b.blocked_email));
+
+    const { data: blocksBy } = await supabase.from('user_blocks').select('blocker_email').eq('blocked_email', user.email);
+    if (blocksBy) setBlockedByEmails(blocksBy.map(b => b.blocker_email));
+  };
+
+  // 👇 المزامنة الذكية (تبحث عن الرسائل الجديدة وتضع النقاط) 👇
+  useEffect(() => {
+    fetchData();
+
+    const interval = setInterval(async () => {
+      if (!user?.email) return;
+      
+      const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
+      if (req) setRequests(prev => JSON.stringify(prev) !== JSON.stringify(req) ? req : prev);
+
+      if (!activeChat) {
+        const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
+        if (pub) setPublicMessages(prev => {
+          const temp = prev.filter(m => String(m.id).startsWith('temp-'));
+          return [...pub, ...temp].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
+        });
+      } else {
+        const { data: priv } = await supabase.from('private_messages').select('*').or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`).order('created_at', { ascending: true }).limit(50);
+        if (priv) setPrivateMessages(prev => {
+          const temp = prev.filter(m => String(m.id).startsWith('temp-'));
+          return [...priv, ...temp].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
+        });
+      }
+
+      // فحص الرسائل الجديدة لوضع النقاط الحمراء
+      if (!isOpen || activeTab !== 'private' || !activeChat) {
+        const { data: latestPrivate } = await supabase
+          .from('private_messages')
+          .select('sender_email, created_at')
+          .eq('receiver_email', user.email)
+          .order('created_at', { ascending: false })
+          .limit(5); // نفحص آخر 5 رسائل
+
+        if (latestPrivate && latestPrivate.length > 0) {
+          let newUnread = false;
+          const newSenders = { ...unreadSenders };
+          
+          latestPrivate.forEach(msg => {
+            if (msg.created_at > lastReadPrivateRef.current) {
+              // إذا كانت الرسالة لم تُقرأ بعد (وليس مني)
+              if (msg.sender_email !== user.email) {
+                newSenders[msg.sender_email] = true;
+                newUnread = true;
+              }
+            }
+          });
+          
+          setHasUnreadPrivate(newUnread);
+          setUnreadSenders(newSenders);
+        }
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [user, activeChat, isOpen, activeTab, unreadSenders]);
+
+  // مسح الإشعارات عند الدخول للخاص
+  useEffect(() => {
+    if (isOpen && activeTab === 'private' && !activeChat) {
+      // إذا دخل القائمة بدون فتح محادثة، نمسح شارة "الرسائل الخاصة"
+      setHasUnreadPrivate(false);
+      lastReadPrivateRef.current = new Date().toISOString();
+    }
+  }, [isOpen, activeTab, activeChat]);
+
+  useEffect(() => {
+    if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  }, [publicMessages, privateMessages, activeChat, isOpen]);
+
+  // 👇 إرسال الرسائل (فوري 100% بدون تأخير) 👇
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !user?.email) return;
+
+    const messageToSend = filter.clean(newMessage);
+    setNewMessage('');
+
+    if (activeChat) {
+      const iBlockedThem = blockedEmails.includes(activeChat.email);
+      const theyBlockedMe = blockedByEmails.includes(activeChat.email);
+
+      if (iBlockedThem || theyBlockedMe) {
+        const blockedMsg = {
+          id: `temp-${Date.now()}`, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend,
+          created_at: new Date().toISOString(), isBlockedMsg: true,
+          blockReason: theyBlockedMe ? t.blockedReason : t.iBlockedReason
+        };
+        setPrivateMessages(prev => [...prev, blockedMsg]);
+        return; 
+      }
+
+      const tempId = `temp-${Date.now()}`;
+      const tempMsg = { id: tempId, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend, created_at: new Date().toISOString() };
+      setPrivateMessages(prev => [...prev, tempMsg]); // تظهر فوراً
+
+      const { data, error } = await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]).select();
+      
+      if (error) {
+        alert("Error: " + error.message);
+        setPrivateMessages(prev => prev.filter(m => m.id !== tempId)); 
+      } else if (data) {
+        setPrivateMessages(prev => prev.map(m => m.id === tempId ? data[0] : m)); // استبدال المؤقت بالحقيقي
+      }
+    } else {
+      const tempId = `temp-${Date.now()}`;
+      const tempMsg = { id: tempId, user_email: user.email, username: user.email.split('@')[0], message: messageToSend, created_at: new Date().toISOString() };
+      setPublicMessages(prev => [...prev, tempMsg]); // تظهر فوراً
+
+      const { data, error } = await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]).select();
+      
+      if (error) {
+        alert("Error: " + error.message);
+        setPublicMessages(prev => prev.filter(m => m.id !== tempId)); 
+      } else if (data) {
+        setPublicMessages(prev => prev.map(m => m.id === tempId ? data[0] : m)); // استبدال المؤقت بالحقيقي
+      }
+    }
+  };
+
+  // دالة فتح محادثة (تمسح النقطة الحمراء)
+  const openChat = (friend: any) => {
+    setActiveChat(friend);
+    setUnreadSenders(prev => ({ ...prev, [friend.email]: false })); // إزالة النقطة
+  };
+
+  const sendFriendRequest = async () => {
+    if (!requestPopupUser) return;
+    await supabase.from('chat_requests').insert([{ sender_email: user.email, receiver_email: requestPopupUser.email, status: 'pending' }]);
+    alert(`${t.sendRequest}: ${requestPopupUser.username}`);
+    setRequestPopupUser(null);
+  };
+
+  const blockUser = async (emailToBlock: string) => {
+    if (!user?.email) return;
+    const { error } = await supabase.from('user_blocks').insert([{ blocker_email: user.email, blocked_email: emailToBlock }]);
+    if (!error) {
+      setBlockedEmails(prev => [emailToBlock, ...prev].slice(0, 10));
+      setShowBlockConfirm(false);
+      setActiveChat(null); 
+    }
+  };
+
+  const unblockUser = async (emailToUnblock: string) => {
+    await supabase.from('user_blocks').delete().eq('blocker_email', user.email).eq('blocked_email', emailToUnblock);
+    setBlockedEmails(prev => prev.filter(e => e !== emailToUnblock));
+  };
+
+  const handleRequest = async (id: number, senderEmail: string, status: 'accepted' | 'rejected') => {
+    await supabase.from('chat_requests').update({ status }).eq('id', id);
+    setRequests(prev => prev.filter(r => r.id !== id));
+    if (status === 'accepted') { fetchData(); setActiveTab('private'); }
+  };
+
+  const deleteFriend = async (id: number) => {
+    await supabase.from('chat_requests').delete().eq('id', id);
+    setFriends(prev => prev.filter(f => f.id !== id));
+    setFriendToDelete(null);
+  };
+
+  const handlePressStart = (friend: any) => { pressTimer.current = setTimeout(() => { setFriendToDelete(friend); }, 800); };
+  const handlePressEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
+
+  const hasNewRequests = requests.length > 0;
+  // يظهر الشعار إذا كان هناك طلب صداقة أو رسالة خاصة جديدة
+  const showYellowBadge = !isOpen && (hasNewRequests || hasUnreadPrivate);
+
+  const visiblePublicMessages = publicMessages.filter(m => !blockedEmails.includes(m.user_email));
+  const visibleFriends = friends.filter(f => !blockedEmails.includes(f.email));
+
+  return (
+    <div className="fixed bottom-20 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
+      
+      {requestPopupUser && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
+          <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center mb-3"><User className="h-6 w-6 text-gray-300" /></div>
+            <h4 className="text-white font-bold mb-4">{requestPopupUser.username}</h4>
+            <button onClick={sendFriendRequest} className="w-full bg-teal-500 hover:bg-teal-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2">
+              <UserPlus className="h-4 w-4" /> {t.sendRequest}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showBlockConfirm && activeChat && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockConfirm(false)}>
+          <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 bg-red-900/50 rounded-full flex items-center justify-center mb-3"><Ban className="h-6 w-6 text-red-500" /></div>
+            <h4 className="text-white font-bold mb-1 text-center">{t.blockConfirmMsg} {activeChat.username}?</h4>
+            <div className="flex gap-2 w-full mt-4">
+              <button onClick={() => setShowBlockConfirm(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg text-xs">{t.cancel}</button>
+              <button onClick={() => blockUser(activeChat.email)} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-xs font-bold">{t.block}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {friendToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setFriendToDelete(null)}>
+          <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 bg-red-900/50 rounded-full flex items-center justify-center mb-3"><Trash2 className="h-6 w-6 text-red-500" /></div>
+            <h4 className="text-white font-bold mb-1 text-center">{t.deleteFriend} {friendToDelete.username}?</h4>
+            <div className="flex gap-2 w-full mt-4">
+              <button onClick={() => setFriendToDelete(null)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg text-xs">{t.cancel}</button>
+              <button onClick={() => deleteFriend(friendToDelete.id)} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-xs font-bold">{t.delete}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBlockedList && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockedList(false)}>
+          <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl w-[80vw] sm:w-72 max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-bold mb-4 flex items-center gap-2 border-b border-gray-700 pb-2"><ShieldAlert className="h-5 w-5 text-red-500" /> {t.blockedList}</h3>
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {blockedEmails.length === 0 ? <p className="text-gray-500 text-xs text-center py-4">{t.noBlocked}</p> : 
+                blockedEmails.map(email => (
+                  <div key={email} className="flex items-center justify-between bg-gray-800 p-2 rounded mb-2">
+                    <span className="text-xs text-white truncate max-w-[120px]">{email.split('@')[0]}</span>
+                    <button onClick={() => unblockUser(email)} className="text-teal-400 text-[10px] bg-teal-500/20 px-2 py-1 rounded hover:bg-teal-500/40">{t.unblock}</button>
+                  </div>
+                ))
+              }
+            </div>
+            <button onClick={() => setShowBlockedList(false)} className="mt-4 w-full bg-gray-700 text-white py-2 rounded text-xs">{t.close}</button>
+          </div>
+        </div>
+      )}
+
+      {showRequestsMenu && (
+        <>
+          <div className="fixed inset-0 z-40 pointer-events-auto" onClick={() => setShowRequestsMenu(false)}></div>
+          <div className="absolute bottom-[70px] right-4 w-[300px] sm:w-[380px] bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden pointer-events-auto">
+            <div className="p-3 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+              <h3 className="text-white font-bold text-sm">{t.chatRequests}</h3>
+              <button onClick={() => setShowRequestsMenu(false)} className="text-gray-400 hover:text-white"><X className="h-4 w-4"/></button>
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {requests.length === 0 ? <p className="text-center text-gray-500 text-xs p-4">{t.noRequests}</p> : null}
+              {requests.map((req) => (
+                <div key={req.id} className="p-3 border-b border-gray-800 flex justify-between items-center">
+                  <span className="text-xs text-white">{req.sender_email.split('@')[0]}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleRequest(req.id, req.sender_email, 'accepted')} className="bg-green-600 text-white px-2 py-1 rounded text-[10px] font-bold">{t.accept}</button>
+                    <button onClick={() => handleRequest(req.id, req.sender_email, 'rejected')} className="bg-red-600 text-white px-2 py-1 rounded text-[10px] font-bold">{t.reject}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {isOpen && (
+        <div className="bg-[#161616] w-[96vw] sm:w-[380px] h-[75vh] sm:h-[500px] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden relative pointer-events-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+          
+          <div className="bg-teal-600 p-3 flex justify-between items-center text-white shrink-0">
+            <div className="flex items-center gap-2">
+              {activeChat && (
+                <button onClick={() => setActiveChat(null)} className={`hover:bg-teal-700 p-1 rounded ${lang === 'ar' ? 'rotate-180' : ''}`}>
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              )}
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                {activeChat ? (
+                  <>
+                    {t.chatWith} {activeChat.username}
+                    <button onClick={() => setShowBlockConfirm(true)} className="text-white hover:scale-110 p-1 bg-red-600 rounded-full transition-transform" title={t.block}>
+                      <User className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (activeTab === 'public' ? t.publicChat : t.myFriends)}
+              </h3>
+            </div>
+            
+            <div className="flex gap-2 items-center">
+              <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="text-xs bg-teal-700 hover:bg-teal-800 px-2 py-1 rounded font-bold transition-colors">
+                {lang === 'en' ? 'AR' : 'EN'}
+              </button>
+
+              {!activeChat && activeTab === 'private' && (
+                <button onClick={() => setShowBlockedList(true)} className="hover:bg-teal-700 p-1 rounded text-red-200">
+                  <ShieldAlert className="h-5 w-5" />
+                </button>
+              )}
+              <button onClick={() => setShowRequestsMenu(!showRequestsMenu)} className="relative p-1">
+                <Bell className={`h-5 w-5 ${hasNewRequests ? 'text-yellow-300 fill-yellow-300' : 'text-white'}`} />
+                {hasNewRequests && <span className="absolute top-0 right-0 bg-red-500 text-[8px] h-3 w-3 rounded-full flex items-center justify-center">{requests.length}</span>}
+              </button>
+              <button onClick={() => { setIsOpen(false); setActiveChat(null); }} className="hover:bg-teal-700 p-1 rounded">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {!activeChat && (
+            <div className="flex bg-[#0a0a0a] border-b border-gray-800 shrink-0">
+              <button onClick={() => setActiveTab('public')} className={`flex-1 py-2 text-xs font-bold ${activeTab === 'public' ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500'}`}>{t.public}</button>
+              <button onClick={() => setActiveTab('private')} className={`flex-1 py-2 text-xs font-bold ${activeTab === 'private' ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500'}`}>{t.private}</button>
+            </div>
+          )}
+
+          <div className="flex-1 min-h-0 p-3 overflow-y-auto flex flex-col gap-3 bg-[#0a0a0a] [overflow-anchor:none]">
+            {!activeChat && activeTab === 'public' && visiblePublicMessages.map((msg, index) => {
+              const isMe = msg.user_email === user?.email;
+              return (
+                <div key={index} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`text-[11px] font-medium ${isMe ? 'text-gray-500' : 'text-gray-400'}`}>{isMe ? t.you : (msg.username || msg.user_email.split('@')[0])}</span>
+                    {!isMe && (
+                      <button onClick={() => setRequestPopupUser({ email: msg.user_email, username: msg.username || msg.user_email.split('@')[0] })} className="text-teal-400 hover:text-teal-300 p-0.5">
+                        <User className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div dir="auto" className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>{msg.message}</div>
+                </div>
+              );
+            })}
+
+            {!activeChat && activeTab === 'private' && (
+              <div className="flex flex-col select-none">
+                {visibleFriends.length === 0 ? <p className="text-center text-gray-500 text-xs mt-5">{t.noFriends}</p> : null}
+                {visibleFriends.map((friend, index) => {
+                  const hasUnread = unreadSenders[friend.email];
+                  return (
+                    <div 
+                      key={index} 
+                      onMouseDown={() => handlePressStart(friend)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
+                      onTouchStart={() => handlePressStart(friend)} onTouchEnd={handlePressEnd}
+                      onClick={() => openChat(friend)} 
+                      className="flex items-center gap-3 p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-800/50 active:bg-gray-700 relative"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center relative">
+                        <User className="h-5 w-5 text-gray-300" />
+                        {/* 👇 النقطة الحمراء الصغيرة تظهر هنا 👇 */}
+                        {hasUnread && (
+                          <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-[#0a0a0a] rounded-full"></span>
+                        )}
+                      </div>
+                      <div className="flex-1"><h4 className="text-sm font-bold text-white">{friend.username}</h4></div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeChat && privateMessages.map((msg, index) => {
+              const isMe = msg.sender_email === user?.email;
+              const blockText = msg.blockReason?.includes('blocked you') || msg.blockReason?.includes('تم حظرك') ? t.blockedReason : t.iBlockedReason;
+
+              return (
+                <div key={index} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  <span className="text-[9px] text-gray-500 mb-0.5">{isMe ? t.you : activeChat.username}</span>
+                  
+                  <div dir="auto" className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${
+                    msg.isBlockedMsg 
+                      ? 'bg-red-900/40 border border-red-500/50 text-red-100 opacity-80' 
+                      : (isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none')
+                  }`}>
+                    {msg.message}
+                  </div>
+
+                  {msg.isBlockedMsg && (
+                    <span className="text-[10px] text-red-500 mt-1 font-bold">
+                      {blockText}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {(activeChat || (!activeChat && activeTab === 'public')) && (
+            <form onSubmit={sendMessage} className="p-2 bg-[#161616] border-t border-gray-800 flex gap-2 shrink-0">
+              <input type="text" dir="auto" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={t.typeMessage} className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"/>
+              <button type="submit" className="bg-teal-500 hover:bg-teal-600 text-white p-2 rounded-lg"><Send className="h-5 w-5" /></button>
+            </form>
+          )}
+        </div>
+      )}
+
+      <button 
+        onClick={() => { 
+          setIsOpen(!isOpen); 
+          if (!isOpen && (hasUnreadPrivate || hasNewRequests)) {
+            setActiveTab('private'); // 👈 الذهاب مباشرة للخاص
+          }
+        }} 
         className={`bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 mr-4 pointer-events-auto relative ${showYellowBadge ? 'animate-pulse' : ''}`}
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
@@ -463,6 +979,15 @@ export default function ChatWidget() {
         {showYellowBadge && !isOpen && (
           <span className="absolute -top-1 -right-1 flex h-5 w-5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-5 w-5 bg-yellow-500 border-2 border-[#0a0a0a] flex items-center justify-center">
+              <Bell className="h-3 w-3 text-white" />
+            </span>
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}g absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-5 w-5 bg-yellow-500 border-2 border-[#0a0a0a] flex items-center justify-center">
               <Bell className="h-3 w-3 text-white" />
             </span>
