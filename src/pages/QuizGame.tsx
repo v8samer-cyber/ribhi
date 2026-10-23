@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { ArrowLeft, Swords, Trophy, Timer, Globe, Gamepad2, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Swords, Trophy, Timer, Globe, Gamepad2, ChevronDown, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 const QUESTIONS = [
   { q: "5 + 7 = ?", options: ["10", "12", "14"], answer: "12" },
@@ -20,11 +20,11 @@ const T = {
     playOnline: 'Play Online (Find Opponent)', friend: 'OR PLAY WITH A FRIEND',
     create: 'Create Private Room', join: 'Join Room', joinPlaceholder: 'ROOM CODE',
     gameSelect: 'Select Game', free: 'Free Play', points: 'Points',
-    waiting: 'Finding opponent...', shareCode: 'Share Code:', playing: 'Race to',
-    you: 'You', opp: 'Opponent', bet: 'Bet', win: 'You Won! 🎉', lose: 'You Lost 😢', wonPts: 'You won points!', lostPts: 'You lost points.', next: 'Next Question', leave: 'Leave Game',
-    confirmLeave: 'Are you sure you want to leave?',
+    waiting: 'Waiting for opponent to join...', shareCode: 'Room Code:', playing: 'Race to',
+    you: 'You', opp: 'Opponent', bet: 'Bet', win: 'You Won! 🎉', lose: 'You Lost 😢', next: 'Next Question', leave: 'Leave Game',
+    confirmLeave: 'Are you sure you want to leave? You will lose the game.',
     quizGame: 'Quiz Duel', memoryGame: 'Memory Match', memorySoon: 'Memory Match (Soon)',
-    selectGameError: 'This game will be available soon!'
+    selectGameError: 'This game will be available soon!', freeMatch: 'Free Match', searchOpponent: 'Searching for a real opponent...'
   },
   ar: {
     back: 'رجوع', title: 'صالة التحدي', sub: 'تحدى أصدقاءك أو لاعبين عبر الإنترنت!',
@@ -32,11 +32,11 @@ const T = {
     playOnline: 'لعب عبر الإنترنت (ابحث عن خصم)', friend: 'أو العب مع صديق',
     create: 'إنشاء غرفة خاصة', join: 'انضمام', joinPlaceholder: 'كود الغرفة',
     gameSelect: 'اختر اللعبة', free: 'لعب مجاني', points: 'نقاط',
-    waiting: 'جاري البحث عن خصم...', shareCode: 'شارك الكود:', playing: 'أول من يجمع',
-    you: 'أنت', opp: 'الخصم', bet: 'رهان', win: 'أنت الفائز! 🎉', lose: 'للأسف، خسرت 😢', wonPts: 'لقد ربحت نقاطاً!', lostPts: 'لقد خسرت نقاطاً.', next: 'السؤال التالي', leave: 'مغادرة اللعبة',
-    confirmLeave: 'هل أنت متأكد من المغادرة؟',
+    waiting: 'بانتظار انضمام الخصم...', shareCode: 'كود الغرفة:', playing: 'أول من يجمع',
+    you: 'أنت', opp: 'الخصم', bet: 'رهان', win: 'أنت الفائز! 🎉', lose: 'للأسف، خسرت 😢', next: 'السؤال التالي', leave: 'مغادرة اللعبة',
+    confirmLeave: 'هل أنت متأكد من المغادرة؟ سوف تخسر اللعبة.',
     quizGame: 'تحدي الذكاء', memoryGame: 'لعبة الذاكرة', memorySoon: 'لعبة الذاكرة (قريباً)',
-    selectGameError: 'هذه اللعبة ستكون متاحة قريباً!'
+    selectGameError: 'هذه اللعبة ستكون متاحة قريباً!', freeMatch: 'مباراة مجانية', searchOpponent: 'جاري البحث عن خصم حقيقي...'
   }
 };
 
@@ -64,6 +64,21 @@ export default function QuizGame() {
   const channelRef = useRef<any>(null);
   const pollIntervalRef = useRef<any>(null);
 
+  // إخفاء الشريط السفلي عند الدخول في اللعبة
+  useEffect(() => {
+    if (inGame) {
+      document.body.classList.add('in-game');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.classList.remove('in-game');
+      document.body.style.overflow = 'auto';
+    }
+    const style = document.createElement('style');
+    style.innerHTML = `body.in-game nav, body.in-game .bottom-nav { display: none !important; }`;
+    document.head.appendChild(style);
+    return () => { document.body.classList.remove('in-game'); document.body.style.overflow = 'auto'; document.head.removeChild(style); };
+  }, [inGame]);
+
   useEffect(() => {
     const fetchBalance = async () => {
       if (!user?.email) return;
@@ -90,10 +105,7 @@ export default function QuizGame() {
     setError('');
 
     const { data, error } = await supabase.rpc('matchmake_secure', {
-      p_player_email: user.email,
-      p_wager: wager,
-      p_target_score: targetScore,
-      p_game_type: selectedGame
+      p_player_email: user.email, p_wager: wager, p_target_score: targetScore, p_game_type: selectedGame
     });
 
     if (error || data.error) {
@@ -131,10 +143,8 @@ export default function QuizGame() {
   const joinRoom = async () => {
     if (!user?.email || !joinCode) return;
     
-    // استخدام الدالة الآمنة للانضمام
     const { data, error } = await supabase.rpc('join_game_secure', {
-      p_room_code: joinCode.toUpperCase(),
-      p_player_email: user.email
+      p_room_code: joinCode.toUpperCase(), p_player_email: user.email
     });
 
     if (error || data.error) return setError(error?.message || data.error);
@@ -147,37 +157,23 @@ export default function QuizGame() {
     setInGame(true);
   };
 
-  // 👇 نظام المزامنة المزدوج (Realtime + Polling) 👇
+  // نظام المزامنة المزدوج
   useEffect(() => {
     if (!inGame || !roomCode) return;
 
-    // 1. الاستماع اللحظي (Realtime)
     const setupChannel = () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
-
       channelRef.current = supabase.channel(`game_${roomCode}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${roomCode}` }, (payload) => {
           setGameRoom(payload.new);
-        })
-        .subscribe((status) => {
-          if (status === 'CHANNEL_ERROR') {
-             setTimeout(setupChannel, 2000); // إعادة محاولة الاتصال
-          }
-        });
+        }).subscribe((status) => { if (status === 'CHANNEL_ERROR') setTimeout(setupChannel, 2000); });
     };
     setupChannel();
 
-    // 2. نظام التحقق الدوري (Polling) - يضمن تحديث الحالة حتى لو فشل الـ Realtime
     pollIntervalRef.current = setInterval(async () => {
       const { data } = await supabase.from('game_rooms').select('*').eq('room_code', roomCode).single();
-      if (data) {
-        setGameRoom((prev: any) => {
-          // تحديث الحالة فقط إذا تغيرت
-          if (JSON.stringify(prev) !== JSON.stringify(data)) return data;
-          return prev;
-        });
-      }
-    }, 2000); // كل ثانيتين
+      if (data) setGameRoom((prev: any) => JSON.stringify(prev) !== JSON.stringify(data) ? data : prev);
+    }, 2000);
 
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
@@ -192,18 +188,13 @@ export default function QuizGame() {
     const currentQ = QUESTIONS[gameRoom.current_question_index % QUESTIONS.length];
     setHasAnswered(true); setSelectedAnswer(answer);
 
-    let p1 = gameRoom.p1_score; let p2 = gameRoom.p2_score;
-    if (answer === currentQ.answer) { if (mySymbol === 'X') p1 += 1; else p2 += 1; }
-
-    let winner = null;
-    if (p1 >= gameRoom.target_score) winner = gameRoom.player1_email;
-    if (p2 >= gameRoom.target_score) winner = gameRoom.player2_email;
-
-    if (winner) {
-      await supabase.rpc('finish_game_secure', { p_room_code: gameRoom.room_code, p_winner_email: winner });
-    } else {
-      await supabase.from('game_rooms').update({ p1_score: p1, p2_score: p2 }).eq('id', gameRoom.id);
-    }
+    const isCorrect = answer === currentQ.answer;
+    
+    await supabase.rpc('submit_answer_secure', {
+      p_room_code: gameRoom.room_code,
+      p_player_email: user.email,
+      p_is_correct: isCorrect
+    });
   };
 
   const nextQuestion = async () => {
@@ -213,16 +204,20 @@ export default function QuizGame() {
   const handleLeaveGame = () => {
     if (window.confirm(t.confirmLeave)) {
       setInGame(false); setGameRoom(null); setError(''); setIsSearching(false);
+      window.location.reload(); 
     }
   };
 
   // ================= شاشة اللعب =================
   if (inGame) {
     const currentQ = QUESTIONS[gameRoom?.current_question_index % QUESTIONS.length];
+
     return (
-      <div className={`min-h-screen bg-[#0a0a0a] text-white p-4 pb-24 flex flex-col items-center justify-center`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <div className={`min-h-screen bg-[#0a0a0a] text-white p-4 flex flex-col items-center justify-center`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="w-full max-w-sm">
-          <button onClick={handleLeaveGame} className="flex items-center gap-2 text-gray-400 mb-6 hover:text-white"><ArrowLeft className={`h-5 w-5 ${lang === 'ar' ? 'rotate-180' : ''}`} /> {t.leave}</button>
+          <button onClick={handleLeaveGame} className="flex items-center gap-2 text-red-400 mb-6 hover:text-red-300 font-bold bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20">
+            <ArrowLeft className={`h-5 w-5 ${lang === 'ar' ? 'rotate-180' : ''}`} /> {t.leave}
+          </button>
           
           <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_50px_rgba(20,184,166,0.2)]">
             <div className="flex justify-between items-center mb-6 bg-[#0a0a0a] p-3 rounded-xl border border-gray-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
@@ -231,7 +226,9 @@ export default function QuizGame() {
                 <div className="text-4xl font-bold text-teal-400 drop-shadow-[0_0_25px_rgba(20,184,166,1)]">{mySymbol === 'X' ? gameRoom?.p1_score : gameRoom?.p2_score}</div>
               </div>
               <div className="text-xs text-gray-500 text-center">
-                <div className="bg-gray-800 px-3 py-1 rounded-full mb-1 border border-gray-700 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.3)]">{gameRoom?.wager === 0 ? t.free : `${t.bet}: ${gameRoom?.wager}`}</div>
+                <div className="bg-gray-800 px-3 py-1 rounded-full mb-1 border border-gray-700 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.3)]">
+                  {gameRoom?.wager === 0 ? t.freeMatch : `${t.bet}: ${gameRoom?.wager}`}
+                </div>
                 <div>{t.playing} {gameRoom?.target_score}</div>
               </div>
               <div className="text-center">
@@ -242,7 +239,8 @@ export default function QuizGame() {
 
             {gameRoom?.status === 'waiting' && (
               <div className="text-center py-10">
-                <div className="animate-pulse text-teal-400 text-xl font-bold mb-4 drop-shadow-[0_0_20px_rgba(20,184,166,1)]">{t.waiting}</div>
+                <Loader2 className="h-12 w-12 text-teal-400 animate-spin mx-auto mb-4" />
+                <div className="text-teal-400 text-xl font-bold mb-4 drop-shadow-[0_0_20px_rgba(20,184,166,1)]">{t.waiting}</div>
                 <p className="text-sm text-gray-400">{t.shareCode} <strong className="text-white text-3xl tracking-widest bg-gray-800 px-5 py-2 rounded-xl border border-teal-500/50 mt-4 inline-block shadow-[0_0_20px_rgba(20,184,166,0.5)]">{roomCode}</strong></p>
               </div>
             )}
@@ -253,28 +251,58 @@ export default function QuizGame() {
                 <div className="flex flex-col gap-3 mb-6">
                   {currentQ.options.map((opt, i) => {
                     let btnClass = "bg-[#0a0a0a] border-gray-700 hover:border-teal-400 hover:shadow-[0_0_25px_rgba(20,184,166,0.6)]";
+                    let icon = null;
                     if (hasAnswered) {
-                      if (opt === currentQ.answer) btnClass = "bg-green-600/20 border-green-400 text-green-300 shadow-[0_0_30px_rgba(34,197,94,0.8)]";
-                      else if (opt === selectedAnswer) btnClass = "bg-red-600/20 border-red-400 text-red-300 shadow-[0_0_30px_rgba(239,68,68,0.8)]";
-                      else btnClass = "bg-[#0a0a0a] border-gray-800 opacity-50";
+                      if (opt === currentQ.answer) {
+                        btnClass = "bg-green-600/20 border-green-400 text-green-300 shadow-[0_0_30px_rgba(34,197,94,0.8)]";
+                        icon = <CheckCircle2 className="h-6 w-6 text-green-400" />;
+                      } else if (opt === selectedAnswer) {
+                        btnClass = "bg-red-600/20 border-red-400 text-red-300 shadow-[0_0_30px_rgba(239,68,68,0.8)]";
+                        icon = <XCircle className="h-6 w-6 text-red-400" />;
+                      } else {
+                        btnClass = "bg-[#0a0a0a] border-gray-800 opacity-50";
+                      }
                     }
-                    return <button key={i} onClick={() => handleAnswer(opt)} disabled={hasAnswered} className={`w-full py-4 rounded-xl border text-xl font-bold transition-all duration-300 ${btnClass}`}>{opt}</button>;
+                    return (
+                      <button key={i} onClick={() => handleAnswer(opt)} disabled={hasAnswered} className={`w-full py-4 px-6 rounded-xl border text-xl font-bold transition-all duration-300 flex justify-between items-center ${btnClass}`}>
+                        <span>{opt}</span> {icon}
+                      </button>
+                    );
                   })}
                 </div>
                 {hasAnswered && (
-                  <button onClick={nextQuestion} className="w-full bg-teal-500 hover:bg-teal-400 text-white py-4 rounded-xl font-bold text-lg shadow-[0_0_30px_rgba(20,184,166,0.8)] hover:shadow-[0_0_50px_rgba(20,184,166,1)] transition-all flex justify-center items-center gap-2">
+                  <button onClick={nextQuestion} className="w-full bg-teal-500 hover:bg-teal-400 text-white py-4 rounded-xl font-bold text-lg shadow-[0_0_30px_rgba(20,184,166,0.8)] flex justify-center items-center gap-2">
                     {t.next} <Timer className="h-5 w-5" />
                   </button>
                 )}
               </div>
             )}
 
+            {/* 👇 شاشة النهاية: فصل واضح بين المباراة المجانية والمدفوعة 👇 */}
             {gameRoom?.status === 'finished' && (
               <div className="text-center py-8">
-                <Trophy className="h-24 w-24 text-yellow-400 mx-auto mb-6 drop-shadow-[0_0_40px_rgba(250,204,21,1)] animate-bounce" />
-                <h3 className="font-bold text-3xl mb-2 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">{gameRoom.winner === user?.email ? t.win : t.lose}</h3>
-                <p className="text-gray-400 mb-8 text-lg">{gameRoom.wager === 0 ? "" : gameRoom.winner === user?.email ? `${t.wonPts} (${gameRoom.wager})` : `${t.lostPts} (${gameRoom.wager})`}</p>
-                <button onClick={() => setInGame(false)} className="bg-teal-500 px-8 py-3 rounded-xl font-bold text-lg shadow-[0_0_25px_rgba(20,184,166,0.8)]">{t.back}</button>
+                {gameRoom.winner === user?.email ? (
+                  <>
+                    <Trophy className="h-24 w-24 text-yellow-400 mx-auto mb-6 drop-shadow-[0_0_40px_rgba(250,204,21,1)] animate-bounce" />
+                    <h3 className="font-bold text-4xl mb-2 text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]">{t.win}</h3>
+                    {gameRoom.wager === 0 ? (
+                       <p className="text-teal-400 font-bold text-xl mb-8 drop-shadow-[0_0_10px_rgba(20,184,166,0.5)]">({t.freeMatch})</p>
+                    ) : (
+                       <p className="text-green-400 font-bold text-2xl mb-8 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)]">+ {gameRoom.wager} LE</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-24 w-24 text-red-500 mx-auto mb-6 drop-shadow-[0_0_40px_rgba(239,68,68,1)]" />
+                    <h3 className="font-bold text-4xl mb-2 text-red-400 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">{t.lose}</h3>
+                    {gameRoom.wager === 0 ? (
+                       <p className="text-gray-500 font-bold text-xl mb-8">({t.freeMatch})</p>
+                    ) : (
+                       <p className="text-red-500 font-bold text-2xl mb-8 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">- {gameRoom.wager} LE</p>
+                    )}
+                  </>
+                )}
+                <button onClick={handleLeaveGame} className="bg-teal-500 px-8 py-3 rounded-xl font-bold text-lg shadow-[0_0_25px_rgba(20,184,166,0.8)] w-full">{t.back}</button>
               </div>
             )}
           </div>
@@ -287,41 +315,33 @@ export default function QuizGame() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-24 flex flex-col items-center" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <div className="w-full max-w-md">
-        
         <div className="flex justify-between items-center mb-6 mt-2">
-          <button onClick={() => navigate('home')} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors bg-[#161616] px-3 py-2 rounded-lg border border-gray-800">
+          <button onClick={() => navigate('home')} className="flex items-center gap-2 text-gray-400 hover:text-white bg-[#161616] px-3 py-2 rounded-lg border border-gray-800">
             <ArrowLeft className={`h-5 w-5 ${lang === 'ar' ? 'rotate-180' : ''}`} /> {t.back}
           </button>
-          <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="flex items-center gap-2 bg-[#161616] text-teal-400 px-4 py-2 rounded-lg border border-gray-800 font-bold hover:bg-gray-800 transition-colors">
+          <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="flex items-center gap-2 bg-[#161616] text-teal-400 px-4 py-2 rounded-lg border border-gray-800 font-bold hover:bg-gray-800">
             <Globe className="h-4 w-4" /> {lang === 'en' ? 'AR' : 'EN'}
           </button>
         </div>
 
         <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_60px_rgba(20,184,166,0.15)] relative overflow-hidden">
-          
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-teal-500/20 blur-[80px] pointer-events-none"></div>
-
-          <div className="flex justify-center mb-4 relative z-10">
-            <Swords className="h-20 w-20 text-teal-400 drop-shadow-[0_0_35px_rgba(20,184,166,1)]" />
-          </div>
-          <h1 className="text-3xl font-bold text-center mb-1 relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-blue-400 drop-shadow-[0_0_10px_rgba(20,184,166,0.5)]">{t.title}</h1>
+          
+          <div className="flex justify-center mb-4 relative z-10"><Swords className="h-20 w-20 text-teal-400 drop-shadow-[0_0_35px_rgba(20,184,166,1)]" /></div>
+          <h1 className="text-3xl font-bold text-center mb-1 text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-blue-400 drop-shadow-[0_0_10px_rgba(20,184,166,0.5)] relative z-10">{t.title}</h1>
           <p className="text-gray-400 text-center text-sm mb-6 relative z-10">{t.sub}</p>
           
-          <div className="bg-gray-800/80 p-4 rounded-xl mb-6 text-center border border-gray-700 flex justify-between items-center relative z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
+          <div className="bg-gray-800/80 p-4 rounded-xl mb-6 text-center border border-gray-700 flex justify-between items-center shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] relative z-10">
             <span className="text-gray-400 text-sm font-medium">{t.balance}:</span>
             <span className="text-teal-400 font-bold text-2xl drop-shadow-[0_0_15px_rgba(20,184,166,0.8)]">{userBalance} LE</span>
           </div>
 
-          {error && <div className="bg-red-500/20 text-red-400 p-3 rounded-lg mb-4 text-sm text-center border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)] relative z-10">{error}</div>}
+          {error && <div className="bg-red-500/20 text-red-400 p-3 rounded-lg mb-4 text-sm text-center border border-red-500/50 relative z-10">{error}</div>}
 
           <div className="mb-6 relative z-10">
             <label className="text-sm text-gray-400 mb-2 block font-medium">{t.gameSelect}</label>
             <div className="relative">
-              <select 
-                value={selectedGame} 
-                onChange={e => handleGameChange(e.target.value)} 
-                className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold focus:outline-none focus:border-teal-500 appearance-none shadow-[0_0_15px_rgba(0,0,0,0.5)]"
-              >
+              <select value={selectedGame} onChange={e => handleGameChange(e.target.value)} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold appearance-none">
                 <option value="quiz">{t.quizGame}</option>
                 <option value="memory">{t.memorySoon}</option>
               </select>
@@ -332,7 +352,7 @@ export default function QuizGame() {
           <div className="grid grid-cols-2 gap-4 mb-8 relative z-10">
             <div>
               <label className="text-sm text-gray-400 mb-2 block font-medium">{t.wager}</label>
-              <select value={wager} onChange={e => setWager(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold focus:outline-none focus:border-teal-500 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+              <select value={wager} onChange={e => setWager(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold">
                 <option value={0}>{t.free}</option>
                 <option value={5}>5 {t.points}</option>
                 <option value={10}>10 {t.points}</option>
@@ -342,7 +362,7 @@ export default function QuizGame() {
             </div>
             <div>
               <label className="text-sm text-gray-400 mb-2 block font-medium">{t.target}</label>
-              <select value={targetScore} onChange={e => setTargetScore(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold focus:outline-none focus:border-teal-500 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+              <select value={targetScore} onChange={e => setTargetScore(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold">
                 <option value={3}>3 {t.points}</option>
                 <option value={5}>5 {t.points}</option>
                 <option value={10}>10 {t.points}</option>
@@ -350,12 +370,8 @@ export default function QuizGame() {
             </div>
           </div>
 
-          <button onClick={playOnline} disabled={isSearching || selectedGame !== 'quiz'} className="w-full bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-400 hover:to-blue-400 text-white py-4 rounded-xl font-bold text-lg mb-6 shadow-[0_0_30px_rgba(20,184,166,0.8)] hover:shadow-[0_0_50px_rgba(20,184,166,1)] transition-all flex items-center justify-center gap-3 disabled:opacity-50 relative z-10">
-            {isSearching ? (
-              <span className="animate-pulse flex items-center gap-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">Finding Opponent...</span>
-            ) : (
-              <><Globe className="h-6 w-6" /> {t.playOnline}</>
-            )}
+          <button onClick={playOnline} disabled={isSearching} className="w-full bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-400 hover:to-blue-400 text-white py-4 rounded-xl font-bold text-lg mb-6 shadow-[0_0_30px_rgba(20,184,166,0.8)] flex items-center justify-center gap-3 relative z-10">
+            {isSearching ? <span className="animate-pulse flex items-center gap-2"><Loader2 className="h-5 w-5 animate-spin"/> {t.searchOpponent}</span> : <><Globe className="h-6 w-6" /> {t.playOnline}</>}
           </button>
 
           <div className="relative flex py-2 items-center mb-6 relative z-10">
@@ -364,15 +380,14 @@ export default function QuizGame() {
             <div className="flex-grow border-t border-gray-700"></div>
           </div>
 
-          <button onClick={createRoom} disabled={selectedGame !== 'quiz'} className="w-full bg-[#0a0a0a] border border-teal-500/50 hover:bg-teal-500/10 text-teal-400 py-3 rounded-xl font-bold mb-4 transition-all shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_30px_rgba(20,184,166,0.6)] disabled:opacity-50 relative z-10">
+          <button onClick={createRoom} className="w-full bg-[#0a0a0a] border border-teal-500/50 hover:bg-teal-500/10 text-teal-400 py-3 rounded-xl font-bold mb-4 relative z-10">
             {t.create}
           </button>
 
           <div className="flex gap-2 relative z-10">
-            <input type="text" placeholder={t.joinPlaceholder} value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-xl px-4 py-3 text-center tracking-widest font-bold focus:outline-none focus:border-teal-500 shadow-[0_0_15px_rgba(0,0,0,0.5)] focus:shadow-[0_0_20px_rgba(20,184,166,0.4)] transition-all" />
-            <button onClick={joinRoom} disabled={selectedGame !== 'quiz'} className="bg-white text-black px-6 rounded-xl font-bold hover:bg-gray-200 shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:shadow-[0_0_30px_rgba(255,255,255,0.6)] transition-all disabled:opacity-50">{t.join}</button>
+            <input type="text" placeholder={t.joinPlaceholder} value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-xl px-4 py-3 text-center tracking-widest font-bold focus:outline-none focus:border-teal-500" />
+            <button onClick={joinRoom} className="bg-white text-black px-6 rounded-xl font-bold hover:bg-gray-200">{t.join}</button>
           </div>
-
         </div>
       </div>
     </div>
