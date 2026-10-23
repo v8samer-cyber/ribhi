@@ -292,7 +292,8 @@ export default function ChatWidget() {
   const visibleFriends = friends.filter(f => !blockedEmails.includes(f.email));
 
   return (
-    <div className="fixed bottom-20 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
+    // تم تعديل الـ bottom إلى 24 لرفع الزر قليلاً عن الشاشة السفلية
+    <div className="fixed bottom-24 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
       
       {requestPopupUser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
@@ -376,7 +377,8 @@ export default function ChatWidget() {
       )}
 
       {isOpen && (
-        <div className="bg-[#161616] w-[96vw] sm:w-[380px] h-[75vh] sm:h-[500px] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden relative pointer-events-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        // 👇 تم تعديل الارتفاع هنا من 75vh إلى 65vh وإضافة max-h لضمان عدم خروج الشريط 👇
+        <div className="bg-[#161616] w-[96vw] sm:w-[380px] h-[65vh] sm:h-[500px] max-h-[calc(100vh-140px)] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden relative pointer-events-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
           
           <div className="bg-teal-600 p-3 flex justify-between items-center text-white shrink-0">
             <div className="flex items-center gap-2">
