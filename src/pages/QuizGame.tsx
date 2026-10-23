@@ -143,27 +143,27 @@ export default function QuizGame({ onBack }: { onBack: () => void }) {
   if (!inGame) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-24 flex flex-col items-center justify-center">
-        <div className="bg-[#161616] p-6 rounded-2xl border border-gray-700 w-full max-w-sm relative">
-          <button onClick={onBack} className="absolute -top-12 left-0 flex items-center gap-2 text-gray-400 hover:text-white">
+        <div className="bg-[#161616] p-6 rounded-2xl border border-gray-700 w-full max-w-sm relative shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+          <button onClick={onBack} className="absolute -top-12 left-0 flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
             <ArrowLeft className="h-5 w-5" /> Back
           </button>
           
           <div className="flex justify-center mb-4">
-            <Swords className="h-12 w-12 text-teal-400" />
+            <Swords className="h-12 w-12 text-teal-400 drop-shadow-[0_0_15px_rgba(20,184,166,0.8)]" />
           </div>
           <h1 className="text-2xl font-bold text-center mb-2">Quiz Duel</h1>
           <p className="text-gray-400 text-center text-sm mb-4">تحدى صديقك واربح نقاطه!</p>
           
-          <div className="bg-gray-800 p-3 rounded-xl mb-4 text-center">
+          <div className="bg-gray-800 p-3 rounded-xl mb-4 text-center border border-gray-700">
             <span className="text-gray-400 text-sm">رصيدك الحالي:</span>
-            <span className="text-teal-400 font-bold ml-2">{userBalance} LE</span>
+            <span className="text-teal-400 font-bold ml-2 drop-shadow-[0_0_5px_rgba(20,184,166,0.5)]">{userBalance} LE</span>
           </div>
 
-          {error && <div className="bg-red-500/20 text-red-400 p-2 rounded mb-4 text-xs text-center">{error}</div>}
+          {error && <div className="bg-red-500/20 text-red-400 p-2 rounded mb-4 text-xs text-center border border-red-500/50">{error}</div>}
 
           <div className="mb-4">
             <label className="text-xs text-gray-400 mb-1 block">مبلغ الرهان (نقاط):</label>
-            <select value={wager} onChange={e => setWager(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg p-2 text-white">
+            <select value={wager} onChange={e => setWager(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-teal-500">
               <option value={5}>5 نقاط</option>
               <option value={10}>10 نقاط</option>
               <option value={50}>50 نقطة</option>
@@ -173,14 +173,15 @@ export default function QuizGame({ onBack }: { onBack: () => void }) {
 
           <div className="mb-6">
             <label className="text-xs text-gray-400 mb-1 block">النقاط المطلوبة للفوز:</label>
-            <select value={targetScore} onChange={e => setTargetScore(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg p-2 text-white">
+            <select value={targetScore} onChange={e => setTargetScore(Number(e.target.value))} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-teal-500">
               <option value={3}>أول من يجمع 3 نقاط</option>
               <option value={5}>أول من يجمع 5 نقاط</option>
               <option value={10}>أول من يجمع 10 نقاط</option>
             </select>
           </div>
 
-          <button onClick={createRoom} className="w-full bg-teal-500 hover:bg-teal-600 py-3 rounded-xl font-bold mb-4 transition-colors">
+          {/* زر متوهج */}
+          <button onClick={createRoom} className="w-full bg-teal-500 hover:bg-teal-400 py-3 rounded-xl font-bold mb-4 transition-all shadow-[0_0_15px_rgba(20,184,166,0.5)] hover:shadow-[0_0_25px_rgba(20,184,166,0.8)]">
             إنشاء غرفة جديدة
           </button>
 
@@ -196,9 +197,9 @@ export default function QuizGame({ onBack }: { onBack: () => void }) {
               placeholder="كود الغرفة" 
               value={joinCode} 
               onChange={e => setJoinCode(e.target.value.toUpperCase())}
-              className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-xl px-4 py-3 text-center tracking-widest font-bold focus:outline-none focus:border-teal-500"
+              className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-xl px-4 py-3 text-center tracking-widest font-bold focus:outline-none focus:border-teal-500 focus:shadow-[0_0_10px_rgba(20,184,166,0.3)] transition-all"
             />
-            <button onClick={joinRoom} className="bg-white text-black px-6 rounded-xl font-bold hover:bg-gray-200">
+            <button onClick={joinRoom} className="bg-white text-black px-6 rounded-xl font-bold hover:bg-gray-200 shadow-[0_0_15px_rgba(255,255,255,0.3)]">
               انضم
             </button>
           </div>
@@ -212,49 +213,50 @@ export default function QuizGame({ onBack }: { onBack: () => void }) {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-24 flex flex-col items-center justify-center">
       <div className="w-full max-w-sm">
-        <button onClick={leaveGame} className="flex items-center gap-2 text-gray-400 mb-6 hover:text-white">
+        <button onClick={leaveGame} className="flex items-center gap-2 text-gray-400 mb-6 hover:text-white transition-colors">
           <ArrowLeft className="h-5 w-5" /> Leave Game
         </button>
 
-        <div className="bg-[#161616] p-6 rounded-2xl border border-gray-700">
+        <div className="bg-[#161616] p-6 rounded-2xl border border-gray-700 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
           
-          <div className="flex justify-between items-center mb-6 bg-[#0a0a0a] p-3 rounded-xl border border-gray-800">
+          {/* لوحة النقاط المتوهجة */}
+          <div className="flex justify-between items-center mb-6 bg-[#0a0a0a] p-3 rounded-xl border border-gray-800 shadow-inner">
             <div className="text-center">
               <div className="text-xs text-gray-400 mb-1">You ({mySymbol})</div>
-              <div className="text-2xl font-bold text-teal-400">{mySymbol === 'X' ? gameRoom?.p1_score : gameRoom?.p2_score}</div>
+              <div className="text-2xl font-bold text-teal-400 drop-shadow-[0_0_10px_rgba(20,184,166,0.8)]">{mySymbol === 'X' ? gameRoom?.p1_score : gameRoom?.p2_score}</div>
             </div>
             <div className="text-xs text-gray-500 text-center">
-              <div className="bg-gray-800 px-3 py-1 rounded-full mb-1">Bet: {gameRoom?.wager} LE</div>
+              <div className="bg-gray-800 px-3 py-1 rounded-full mb-1 border border-gray-700">Bet: {gameRoom?.wager} LE</div>
               <div>Race to {gameRoom?.target_score}</div>
             </div>
             <div className="text-center">
                <div className="text-xs text-gray-400 mb-1">Opponent ({mySymbol === 'X' ? 'O' : 'X'})</div>
-               <div className="text-2xl font-bold text-orange-400">{mySymbol === 'X' ? gameRoom?.p2_score : gameRoom?.p1_score}</div>
+               <div className="text-2xl font-bold text-orange-400 drop-shadow-[0_0_10px_rgba(251,146,60,0.8)]">{mySymbol === 'X' ? gameRoom?.p2_score : gameRoom?.p1_score}</div>
             </div>
           </div>
 
           {gameRoom?.status === 'waiting' && (
             <div className="text-center py-8">
-              <div className="animate-pulse text-teal-400 font-bold mb-2">Waiting for opponent...</div>
-              <p className="text-sm text-gray-400">Share code: <strong className="text-white text-xl tracking-widest">{roomCode}</strong></p>
+              <div className="animate-pulse text-teal-400 font-bold mb-2 drop-shadow-[0_0_10px_rgba(20,184,166,0.5)]">Waiting for opponent...</div>
+              <p className="text-sm text-gray-400">Share code: <strong className="text-white text-xl tracking-widest bg-gray-800 px-3 py-1 rounded-lg border border-gray-700">{roomCode}</strong></p>
             </div>
           )}
 
           {gameRoom?.status === 'playing' && currentQ && (
             <div>
-              <h2 className="text-center text-2xl font-bold mb-6 bg-gray-800 py-4 rounded-xl border border-gray-700">{currentQ.q}</h2>
+              <h2 className="text-center text-2xl font-bold mb-6 bg-gray-800 py-4 rounded-xl border border-gray-700 shadow-[0_0_15px_rgba(255,255,255,0.1)]">{currentQ.q}</h2>
               
               <div className="flex flex-col gap-3 mb-6">
                 {currentQ.options.map((opt, i) => {
-                  let btnClass = "bg-[#0a0a0a] border-gray-700 hover:border-teal-500";
+                  let btnClass = "bg-[#0a0a0a] border-gray-700 hover:border-teal-500 hover:shadow-[0_0_15px_rgba(20,184,166,0.4)]";
                   if (hasAnswered) {
-                    if (opt === currentQ.answer) btnClass = "bg-green-600/20 border-green-500 text-green-400";
-                    else if (opt === selectedAnswer) btnClass = "bg-red-600/20 border-red-500 text-red-400";
+                    if (opt === currentQ.answer) btnClass = "bg-green-600/20 border-green-500 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.5)]";
+                    else if (opt === selectedAnswer) btnClass = "bg-red-600/20 border-red-500 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.5)]";
                     else btnClass = "bg-[#0a0a0a] border-gray-800 opacity-50";
                   }
 
                   return (
-                    <button key={i} onClick={() => handleAnswer(opt)} disabled={hasAnswered} className={`w-full py-3 rounded-xl border text-lg font-bold transition-colors ${btnClass}`}>
+                    <button key={i} onClick={() => handleAnswer(opt)} disabled={hasAnswered} className={`w-full py-3 rounded-xl border text-lg font-bold transition-all duration-300 ${btnClass}`}>
                       {opt}
                     </button>
                   );
@@ -262,7 +264,7 @@ export default function QuizGame({ onBack }: { onBack: () => void }) {
               </div>
 
               {hasAnswered && (
-                <button onClick={nextQuestion} className="w-full bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+                <button onClick={nextQuestion} className="w-full bg-teal-500 hover:bg-teal-400 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(20,184,166,0.5)] hover:shadow-[0_0_25px_rgba(20,184,166,0.8)] transition-all">
                   Next Question <Timer className="h-5 w-5" />
                 </button>
               )}
@@ -271,8 +273,8 @@ export default function QuizGame({ onBack }: { onBack: () => void }) {
 
           {gameRoom?.status === 'finished' && (
             <div className="text-center py-8">
-              <Trophy className="h-16 w-16 text-yellow-400 mx-auto mb-4" />
-              <h3 className="font-bold text-2xl mb-2">
+              <Trophy className="h-16 w-16 text-yellow-400 mx-auto mb-4 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] animate-bounce" />
+              <h3 className="font-bold text-2xl mb-2 drop-shadow-md">
                 {gameRoom.winner === user?.email ? "You Won! 🎉" : "You Lost 😢"}
               </h3>
               <p className="text-gray-400 mb-6">
@@ -280,7 +282,7 @@ export default function QuizGame({ onBack }: { onBack: () => void }) {
                   ? `You won ${gameRoom.wager} points!` 
                   : `You lost ${gameRoom.wager} points.`}
               </p>
-              <button onClick={leaveGame} className="bg-teal-500 px-6 py-2 rounded-lg text-sm font-bold hover:bg-teal-600">
+              <button onClick={leaveGame} className="bg-teal-500 px-6 py-2 rounded-lg text-sm font-bold hover:bg-teal-400 shadow-[0_0_15px_rgba(20,184,166,0.5)] transition-all">
                 Back to Lobby
               </button>
             </div>
