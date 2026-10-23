@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { ArrowLeft, Swords, Trophy, Timer, Globe, Gamepad2, ChevronDown, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Swords, Trophy, Timer, Globe, Gamepad2, ChevronDown, CheckCircle2, XCircle, Loader2, Search } from 'lucide-react';
 
 const QUESTIONS = [
   { q: "5 + 7 = ?", options: ["10", "12", "14"], answer: "12" },
@@ -20,11 +20,11 @@ const T = {
     playOnline: 'Play Online (Find Opponent)', friend: 'OR PLAY WITH A FRIEND',
     create: 'Create Private Room', join: 'Join Room', joinPlaceholder: 'ROOM CODE',
     gameSelect: 'Select Game', free: 'Free Play', points: 'Points',
-    waiting: 'Waiting for opponent to join...', shareCode: 'Room Code:', playing: 'Race to',
+    waiting: 'Searching for a real opponent...', shareCode: 'Room Code:', playing: 'Race to',
     you: 'You', opp: 'Opponent', bet: 'Bet', win: 'You Won! 🎉', lose: 'You Lost 😢', next: 'Next Question', leave: 'Leave Game',
     confirmLeave: 'Are you sure you want to leave? You will lose the game.',
     quizGame: 'Quiz Duel', memoryGame: 'Memory Match', memorySoon: 'Memory Match (Soon)',
-    selectGameError: 'This game will be available soon!', freeMatch: 'Free Match', searchOpponent: 'Searching for a real opponent...'
+    selectGameError: 'This game will be available soon!', freeMatch: 'Free Match', searchOpponent: 'Searching...'
   },
   ar: {
     back: 'رجوع', title: 'صالة التحدي', sub: 'تحدى أصدقاءك أو لاعبين عبر الإنترنت!',
@@ -32,11 +32,11 @@ const T = {
     playOnline: 'لعب عبر الإنترنت (ابحث عن خصم)', friend: 'أو العب مع صديق',
     create: 'إنشاء غرفة خاصة', join: 'انضمام', joinPlaceholder: 'كود الغرفة',
     gameSelect: 'اختر اللعبة', free: 'لعب مجاني', points: 'نقاط',
-    waiting: 'بانتظار انضمام الخصم...', shareCode: 'كود الغرفة:', playing: 'أول من يجمع',
+    waiting: 'جاري البحث عن خصم حقيقي...', shareCode: 'كود الغرفة:', playing: 'أول من يجمع',
     you: 'أنت', opp: 'الخصم', bet: 'رهان', win: 'أنت الفائز! 🎉', lose: 'للأسف، خسرت 😢', next: 'السؤال التالي', leave: 'مغادرة اللعبة',
     confirmLeave: 'هل أنت متأكد من المغادرة؟ سوف تخسر اللعبة.',
     quizGame: 'تحدي الذكاء', memoryGame: 'لعبة الذاكرة', memorySoon: 'لعبة الذاكرة (قريباً)',
-    selectGameError: 'هذه اللعبة ستكون متاحة قريباً!', freeMatch: 'مباراة مجانية', searchOpponent: 'جاري البحث عن خصم حقيقي...'
+    selectGameError: 'هذه اللعبة ستكون متاحة قريباً!', freeMatch: 'مباراة مجانية', searchOpponent: 'جاري البحث...'
   }
 };
 
@@ -64,19 +64,34 @@ export default function QuizGame() {
   const channelRef = useRef<any>(null);
   const pollIntervalRef = useRef<any>(null);
 
-  // إخفاء الشريط السفلي عند الدخول في اللعبة
+  // 👇 إصلاح مشكلة نزول الشاشة وإخفاء الشريط السفلي بقوة 👇
   useEffect(() => {
     if (inGame) {
+      window.scrollTo(0, 0); // إجبار الشاشة على العودة للأعلى
       document.body.classList.add('in-game');
       document.body.style.overflow = 'hidden';
     } else {
       document.body.classList.remove('in-game');
       document.body.style.overflow = 'auto';
     }
+    
+    // كود CSS قوي لإخفاء أي شريط تنقل سفلي
     const style = document.createElement('style');
-    style.innerHTML = `body.in-game nav, body.in-game .bottom-nav { display: none !important; }`;
+    style.innerHTML = `
+      body.in-game nav,
+      body.in-game .bottom-nav,
+      body.in-game [class*="bottom-nav"],
+      body.in-game div[class*="fixed bottom-0"] {
+        display: none !important;
+      }
+    `;
     document.head.appendChild(style);
-    return () => { document.body.classList.remove('in-game'); document.body.style.overflow = 'auto'; document.head.removeChild(style); };
+    
+    return () => { 
+      document.body.classList.remove('in-game'); 
+      document.body.style.overflow = 'auto'; 
+      document.head.removeChild(style); 
+    };
   }, [inGame]);
 
   useEffect(() => {
@@ -157,7 +172,6 @@ export default function QuizGame() {
     setInGame(true);
   };
 
-  // نظام المزامنة المزدوج
   useEffect(() => {
     if (!inGame || !roomCode) return;
 
@@ -239,9 +253,10 @@ export default function QuizGame() {
 
             {gameRoom?.status === 'waiting' && (
               <div className="text-center py-10">
-                <Loader2 className="h-12 w-12 text-teal-400 animate-spin mx-auto mb-4" />
+                <Search className="h-12 w-12 text-teal-400 animate-pulse mx-auto mb-4" />
                 <div className="text-teal-400 text-xl font-bold mb-4 drop-shadow-[0_0_20px_rgba(20,184,166,1)]">{t.waiting}</div>
                 <p className="text-sm text-gray-400">{t.shareCode} <strong className="text-white text-3xl tracking-widest bg-gray-800 px-5 py-2 rounded-xl border border-teal-500/50 mt-4 inline-block shadow-[0_0_20px_rgba(20,184,166,0.5)]">{roomCode}</strong></p>
+                <p className="text-xs text-gray-500 mt-6 max-w-[250px] mx-auto">To play with a friend, share this code. To play online, wait for another player to join.</p>
               </div>
             )}
 
@@ -278,7 +293,6 @@ export default function QuizGame() {
               </div>
             )}
 
-            {/* 👇 شاشة النهاية: فصل واضح بين المباراة المجانية والمدفوعة 👇 */}
             {gameRoom?.status === 'finished' && (
               <div className="text-center py-8">
                 {gameRoom.winner === user?.email ? (
