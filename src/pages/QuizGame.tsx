@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { ArrowLeft, Swords, Trophy, Timer, Globe, Gamepad2, ChevronDown, CheckCircle2, XCircle, Loader2, Search, Info, X } from 'lucide-react';
+import { ArrowLeft, Swords, Trophy, Timer, Globe, ChevronDown, CheckCircle2, XCircle, Loader2, Search, Info, X } from 'lucide-react';
 
 const QUESTIONS = [
   { q: "5 + 7 = ?", options: ["10", "12", "14"], answer: "12" },
@@ -18,26 +18,24 @@ const T = {
     back: 'Back', title: 'Arena', sub: 'Challenge friends or players online!',
     balance: 'Current Balance', wager: 'Wager Amount', target: 'Points to Win',
     playOnline: 'Play Online (Find Opponent)', friend: 'OR PLAY WITH A FRIEND',
-    create: 'Create Private Room', join: 'Join Room', joinPlaceholder: 'ROOM CODE',
+    create: 'Create Private Room', join: 'Join', joinPlaceholder: 'CODE',
     gameSelect: 'Select Game', free: 'Free Play', points: 'Points',
     waiting: 'Searching for a real opponent...', shareCode: 'Room Code:', playing: 'Race to',
     you: 'You', opp: 'Opponent', bet: 'Bet', win: 'You Won! 🎉', lose: 'You Lost 😢', next: 'Next Question', leave: 'Leave Game',
     confirmLeave: 'Are you sure you want to leave? You will lose the game.',
-    quizGame: 'Quiz Duel', memoryGame: 'Memory Match', memorySoon: 'Memory Match (Soon)',
-    selectGameError: 'This game will be available soon!', freeMatch: 'Free Match', searchOpponent: 'Searching...',
+    quizGame: 'Quiz Duel', freeMatch: 'Free Match', searchOpponent: 'Searching...',
     infoTitle: 'How to Play', infoText: 'Welcome to the Arena!\n\n1. Choose your wager and points to win.\n2. Click "Play Online" to find a random opponent.\n3. Or create a private room and share the code with a friend.\n4. Answer questions faster than your opponent to win the prize!', close: 'Got it!'
   },
   ar: {
     back: 'رجوع', title: 'صالة التحدي', sub: 'تحدى أصدقاءك أو لاعبين عبر الإنترنت!',
     balance: 'رصيدك الحالي', wager: 'مبلغ الرهان', target: 'النقاط المطلوبة للفوز',
     playOnline: 'لعب عبر الإنترنت (ابحث عن خصم)', friend: 'أو العب مع صديق',
-    create: 'إنشاء غرفة خاصة', join: 'انضمام', joinPlaceholder: 'كود الغرفة',
+    create: 'إنشاء غرفة خاصة', join: 'انضمام', joinPlaceholder: 'الكود',
     gameSelect: 'اختر اللعبة', free: 'لعب مجاني', points: 'نقاط',
     waiting: 'جاري البحث عن خصم حقيقي...', shareCode: 'كود الغرفة:', playing: 'أول من يجمع',
     you: 'أنت', opp: 'الخصم', bet: 'رهان', win: 'أنت الفائز! 🎉', lose: 'للأسف، خسرت 😢', next: 'السؤال التالي', leave: 'مغادرة اللعبة',
     confirmLeave: 'هل أنت متأكد من المغادرة؟ سوف تخسر اللعبة.',
-    quizGame: 'تحدي الذكاء', memoryGame: 'لعبة الذاكرة', memorySoon: 'لعبة الذاكرة (قريباً)',
-    selectGameError: 'هذه اللعبة ستكون متاحة قريباً!', freeMatch: 'مباراة مجانية', searchOpponent: 'جاري البحث...',
+    quizGame: 'تحدي الذكاء', freeMatch: 'مباراة مجانية', searchOpponent: 'جاري البحث...',
     infoTitle: 'كيف تلعب؟', infoText: 'مرحباً بك في صالة التحدي!\n\n1. اختر مبلغ الرهان وعدد النقاط للفوز.\n2. اضغط "لعب عبر الإنترنت" للبحث عن خصم عشوائي.\n3. أو أنشئ غرفة خاصة وشارك الكود مع صديقك.\n4. أجب على الأسئلة أسرع من خصمك لتربح الجائزة!', close: 'فهمت!'
   }
 };
@@ -54,7 +52,7 @@ export default function QuizGame() {
   const [mySymbol, setMySymbol] = useState<'X' | 'O' | null>(null);
   const [error, setError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [showInfo, setShowInfo] = useState(false); // حالة نافذة المعلومات
+  const [showInfo, setShowInfo] = useState(false); 
   
   const [selectedGame, setSelectedGame] = useState('quiz'); 
   const [wager, setWager] = useState(0);
@@ -67,34 +65,19 @@ export default function QuizGame() {
   const channelRef = useRef<any>(null);
   const pollIntervalRef = useRef<any>(null);
 
-  // 👇 إخفاء الشريط السفلي وإيقاف التمرير وإخفاء الدردشة 👇
   useEffect(() => {
     if (inGame) {
-      window.scrollTo(0, 0); // إجبار الشاشة على العودة للأعلى
+      window.scrollTo(0, 0);
       document.body.classList.add('in-game');
-      document.body.style.overflow = 'hidden'; // منع تمرير الصفحة
+      document.body.style.overflow = 'hidden';
     } else {
       document.body.classList.remove('in-game');
       document.body.style.overflow = 'auto';
     }
-    
-    // كود CSS قوي لإخفاء شريط التنقل وأيقونة الدردشة
     const style = document.createElement('style');
-    style.innerHTML = `
-      body.in-game nav,
-      body.in-game .bottom-nav,
-      body.in-game .fixed.bottom-20,
-      body.in-game .fixed.bottom-24 { 
-        display: none !important; 
-      }
-    `;
+    style.innerHTML = `body.in-game nav, body.in-game .bottom-nav, body.in-game .fixed.bottom-20, body.in-game .fixed.bottom-24 { display: none !important; }`;
     document.head.appendChild(style);
-    
-    return () => { 
-      document.body.classList.remove('in-game'); 
-      document.body.style.overflow = 'auto'; 
-      document.head.removeChild(style); 
-    };
+    return () => { document.body.classList.remove('in-game'); document.body.style.overflow = 'auto'; document.head.removeChild(style); };
   }, [inGame]);
 
   useEffect(() => {
@@ -105,15 +88,6 @@ export default function QuizGame() {
     };
     fetchBalance();
   }, [user]);
-
-  const handleGameChange = (gameId: string) => {
-    if (gameId === 'memory') {
-      alert(t.selectGameError);
-      setSelectedGame('quiz');
-    } else {
-      setSelectedGame(gameId);
-    }
-  };
 
   const playOnline = async () => {
     if (!user?.email) return;
@@ -175,7 +149,6 @@ export default function QuizGame() {
     setInGame(true);
   };
 
-  // نظام المزامنة المزدوج
   useEffect(() => {
     if (!inGame || !roomCode) return;
 
@@ -202,7 +175,6 @@ export default function QuizGame() {
   useEffect(() => { setHasAnswered(false); setSelectedAnswer(null); }, [gameRoom?.current_question_index]);
 
   const handleAnswer = async (answer: string) => {
-    // لا يمكن الإجابة إذا لم يكن هناك خصم أو اللعبة لم تبدأ
     if (!gameRoom?.player2_email || hasAnswered || gameRoom.status !== 'playing' || gameRoom.winner) return;
     
     const currentQ = QUESTIONS[gameRoom.current_question_index % QUESTIONS.length];
@@ -224,19 +196,19 @@ export default function QuizGame() {
   const handleLeaveGame = () => {
     if (window.confirm(t.confirmLeave)) {
       setInGame(false); setGameRoom(null); setError(''); setIsSearching(false);
-      window.location.reload(); // تحديث لضمان عودة كل شيء لطبيعته
+      window.location.reload(); 
     }
   };
 
-  // ================= شاشة اللعب (تغطي الشاشة بالكامل) =================
+  // ================= شاشة اللعب =================
   if (inGame) {
     const currentQ = QUESTIONS[gameRoom?.current_question_index % QUESTIONS.length];
+    // 👇 الشرط الصارم: يجب أن يكون هناك خصم حقيقي لكي تبدأ اللعبة 👇
     const hasRealOpponent = !!gameRoom?.player2_email;
 
     return (
       <div className={`fixed inset-0 z-[100] bg-[#0a0a0a] text-white flex flex-col overflow-hidden`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         
-        {/* الهيدر الثابت (زر المغادرة فقط) */}
         <div className="p-4 shrink-0 flex justify-between items-center bg-[#161616] border-b border-gray-800">
           <button onClick={handleLeaveGame} className="flex items-center gap-2 text-red-400 hover:text-red-300 font-bold bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20">
             <ArrowLeft className={`h-5 w-5 ${lang === 'ar' ? 'rotate-180' : ''}`} /> {t.leave}
@@ -246,12 +218,10 @@ export default function QuizGame() {
           </span>
         </div>
 
-        {/* منطقة المحتوى القابلة للتمرير (إذا كانت الشاشة صغيرة) */}
         <div className="flex-1 overflow-y-auto p-4 flex justify-center items-center">
           <div className="w-full max-w-sm">
             <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_50px_rgba(20,184,166,0.2)]">
               
-              {/* لوحة النقاط */}
               <div className="flex justify-between items-center mb-6 bg-[#0a0a0a] p-3 rounded-xl border border-gray-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                 <div className="text-center">
                   <div className="text-xs text-gray-400 mb-1">{t.you} ({mySymbol})</div>
@@ -269,7 +239,6 @@ export default function QuizGame() {
                 </div>
               </div>
 
-              {/* شاشة الانتظار - تظهر فقط إذا لم ينضم خصم */}
               {!hasRealOpponent && gameRoom?.status !== 'finished' && (
                 <div className="text-center py-10">
                   <Search className="h-12 w-12 text-teal-400 animate-pulse mx-auto mb-4" />
@@ -278,7 +247,6 @@ export default function QuizGame() {
                 </div>
               )}
 
-              {/* شاشة اللعب - تظهر فقط إذا كان هناك خصم حقيقي */}
               {hasRealOpponent && gameRoom?.status === 'playing' && currentQ && (
                 <div>
                   <h2 className="text-center text-2xl font-bold mb-6 bg-gray-800 py-5 rounded-xl border border-teal-500/30 shadow-[0_0_30px_rgba(20,184,166,0.2)] text-white">{currentQ.q}</h2>
@@ -312,7 +280,6 @@ export default function QuizGame() {
                 </div>
               )}
 
-              {/* شاشة النهاية */}
               {gameRoom?.status === 'finished' && (
                 <div className="text-center py-8">
                   {gameRoom.winner === user?.email ? (
@@ -350,7 +317,6 @@ export default function QuizGame() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-24 flex flex-col items-center" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       
-      {/* نافذة المعلومات المنبثقة */}
       {showInfo && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setShowInfo(false)}>
           <div className="bg-[#161616] border border-teal-500/50 p-6 rounded-2xl max-w-sm w-full shadow-[0_0_50px_rgba(20,184,166,0.3)] relative" onClick={e => e.stopPropagation()}>
@@ -378,7 +344,6 @@ export default function QuizGame() {
         <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_60px_rgba(20,184,166,0.15)] relative overflow-hidden">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-teal-500/20 blur-[80px] pointer-events-none"></div>
           
-          {/* 👇 أيقونة السيفين مع علامة التعجب 👇 */}
           <div className="flex justify-center items-center gap-4 mb-4 relative z-10">
             <Swords className="h-20 w-20 text-teal-400 drop-shadow-[0_0_35px_rgba(20,184,166,1)]" />
             <button onClick={() => setShowInfo(true)} className="bg-teal-500/20 p-2 rounded-full border border-teal-500/50 hover:bg-teal-500/40 transition-all shadow-[0_0_15px_rgba(20,184,166,0.5)] animate-pulse">
@@ -399,9 +364,8 @@ export default function QuizGame() {
           <div className="mb-6 relative z-10">
             <label className="text-sm text-gray-400 mb-2 block font-medium">{t.gameSelect}</label>
             <div className="relative">
-              <select value={selectedGame} onChange={e => handleGameChange(e.target.value)} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold appearance-none">
+              <select value={selectedGame} onChange={e => setSelectedGame(e.target.value)} className="w-full bg-[#0a0a0a] border border-gray-700 rounded-xl p-3 text-white font-bold appearance-none">
                 <option value="quiz">{t.quizGame}</option>
-                <option value="memory">{t.memorySoon}</option>
               </select>
               <ChevronDown className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-500 pointer-events-none h-5 w-5" />
             </div>
@@ -442,10 +406,20 @@ export default function QuizGame() {
             {t.create}
           </button>
 
-          <div className="flex gap-2 relative z-10">
-            <input type="text" placeholder={t.joinPlaceholder} value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-xl px-4 py-3 text-center tracking-widest font-bold focus:outline-none focus:border-teal-500" />
-            <button onClick={joinRoom} className="bg-white text-black px-6 rounded-xl font-bold hover:bg-gray-200">{t.join}</button>
+          {/* 👇 إصلاح تداخل زر الانضمام وكود الغرفة باستخدام Grid 👇 */}
+          <div className="grid grid-cols-3 gap-2 relative z-10">
+            <input 
+              type="text" 
+              placeholder={t.joinPlaceholder} 
+              value={joinCode} 
+              onChange={e => setJoinCode(e.target.value)} 
+              className="col-span-2 bg-[#0a0a0a] border border-gray-700 rounded-xl px-4 py-3 text-center tracking-widest font-bold focus:outline-none focus:border-teal-500" 
+            />
+            <button onClick={joinRoom} className="col-span-1 bg-white text-black rounded-xl font-bold hover:bg-gray-200 shadow-[0_0_20px_rgba(255,255,255,0.4)] transition-all text-sm">
+              {t.join}
+            </button>
           </div>
+
         </div>
       </div>
     </div>
