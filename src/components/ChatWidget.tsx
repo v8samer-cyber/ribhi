@@ -292,11 +292,11 @@ export default function ChatWidget() {
   const visibleFriends = friends.filter(f => !blockedEmails.includes(f.email));
 
   return (
-    // تم تعديل الـ bottom إلى 24 لرفع الزر قليلاً عن الشاشة السفلية
-    <div className="fixed bottom-24 right-0 sm:right-4 z-50 flex flex-col items-end w-full sm:w-auto px-2 sm:px-0 pointer-events-none">
+    // 👇 التعديل: جعل الحاوية تغطي الشاشة بالكامل في الهاتف 👇
+    <div className="fixed inset-0 z-[100] flex flex-col justify-end pointer-events-none sm:inset-auto sm:bottom-24 sm:right-4 sm:items-end">
       
       {requestPopupUser && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setRequestPopupUser(null)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
             <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center mb-3"><User className="h-6 w-6 text-gray-300" /></div>
             <h4 className="text-white font-bold mb-4">{requestPopupUser.username}</h4>
@@ -308,7 +308,7 @@ export default function ChatWidget() {
       )}
 
       {showBlockConfirm && activeChat && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockConfirm(false)}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockConfirm(false)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
             <div className="w-12 h-12 bg-red-900/50 rounded-full flex items-center justify-center mb-3"><Ban className="h-6 w-6 text-red-500" /></div>
             <h4 className="text-white font-bold mb-1 text-center">{t.blockConfirmMsg} {activeChat.username}?</h4>
@@ -321,7 +321,7 @@ export default function ChatWidget() {
       )}
 
       {friendToDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setFriendToDelete(null)}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setFriendToDelete(null)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center w-64" onClick={(e) => e.stopPropagation()}>
             <div className="w-12 h-12 bg-red-900/50 rounded-full flex items-center justify-center mb-3"><Trash2 className="h-6 w-6 text-red-500" /></div>
             <h4 className="text-white font-bold mb-1 text-center">{t.deleteFriend} {friendToDelete.username}?</h4>
@@ -334,7 +334,7 @@ export default function ChatWidget() {
       )}
 
       {showBlockedList && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockedList(false)}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 pointer-events-auto" onClick={() => setShowBlockedList(false)}>
           <div className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-700 shadow-2xl w-[80vw] sm:w-72 max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-white font-bold mb-4 flex items-center gap-2 border-b border-gray-700 pb-2"><ShieldAlert className="h-5 w-5 text-red-500" /> {t.blockedList}</h3>
             <div className="flex-1 overflow-y-auto min-h-0">
@@ -354,8 +354,8 @@ export default function ChatWidget() {
 
       {showRequestsMenu && (
         <>
-          <div className="fixed inset-0 z-40 pointer-events-auto" onClick={() => setShowRequestsMenu(false)}></div>
-          <div className="absolute bottom-[70px] right-4 w-[300px] sm:w-[380px] bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden pointer-events-auto">
+          <div className="fixed inset-0 z-[90] pointer-events-auto" onClick={() => setShowRequestsMenu(false)}></div>
+          <div className="absolute bottom-[80px] right-4 w-[90vw] sm:w-[380px] bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-2xl z-[100] overflow-hidden pointer-events-auto">
             <div className="p-3 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
               <h3 className="text-white font-bold text-sm">{t.chatRequests}</h3>
               <button onClick={() => setShowRequestsMenu(false)} className="text-gray-400 hover:text-white"><X className="h-4 w-4"/></button>
@@ -377,8 +377,8 @@ export default function ChatWidget() {
       )}
 
       {isOpen && (
-        // 👇 تم تعديل الارتفاع هنا من 75vh إلى 65vh وإضافة max-h لضمان عدم خروج الشريط 👇
-        <div className="bg-[#161616] w-[96vw] sm:w-[380px] h-[65vh] sm:h-[500px] max-h-[calc(100vh-140px)] border border-gray-700 rounded-2xl shadow-2xl flex flex-col mb-4 overflow-hidden relative pointer-events-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        // 👇 التعديل: ارتفاع 85% وعرض كامل في الهاتف، وتصميم يغطي شريط التنقل السفلي 👇
+        <div className="bg-[#161616] w-full h-[85dvh] sm:w-[380px] sm:h-[500px] border-t sm:border border-gray-700 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden relative pointer-events-auto mb-0 sm:mb-4" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
           
           <div className="bg-teal-600 p-3 flex justify-between items-center text-white shrink-0">
             <div className="flex items-center gap-2">
@@ -500,7 +500,7 @@ export default function ChatWidget() {
           </div>
 
           {(activeChat || (!activeChat && activeTab === 'public')) && (
-            <form onSubmit={sendMessage} className="p-2 bg-[#161616] border-t border-gray-800 flex gap-2 shrink-0">
+            <form onSubmit={sendMessage} className="p-2 bg-[#161616] border-t border-gray-800 flex gap-2 shrink-0 pb-safe">
               <input type="text" dir="auto" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={t.typeMessage} className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"/>
               <button type="submit" className="bg-teal-500 hover:bg-teal-600 text-white p-2 rounded-lg"><Send className="h-5 w-5" /></button>
             </form>
@@ -508,26 +508,29 @@ export default function ChatWidget() {
         </div>
       )}
 
-      <button 
-        onClick={() => { 
-          setIsOpen(!isOpen); 
-          if (!isOpen && (hasUnreadPrivate || hasNewRequests)) {
-            setActiveTab('private');
-          }
-        }} 
-        className={`bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 mr-4 pointer-events-auto relative ${showYellowBadge ? 'animate-pulse' : ''}`}
-      >
-        {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
-        
-        {showYellowBadge && !isOpen && (
-          <span className="absolute -top-1 -right-1 flex h-5 w-5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-5 w-5 bg-yellow-500 border-2 border-[#0a0a0a] flex items-center justify-center">
-              <Bell className="h-3 w-3 text-white" />
+      {/* زر الدردشة العائم (يختفي عند فتح الدردشة) */}
+      {!isOpen && (
+        <button 
+          onClick={() => { 
+            setIsOpen(true); 
+            if (hasUnreadPrivate || hasNewRequests) {
+              setActiveTab('private');
+            }
+          }} 
+          className={`bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 mr-4 mb-4 pointer-events-auto relative ${showYellowBadge ? 'animate-pulse' : ''}`}
+        >
+          <MessageCircle className="h-6 w-6" />
+          
+          {showYellowBadge && (
+            <span className="absolute -top-1 -right-1 flex h-5 w-5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-5 w-5 bg-yellow-500 border-2 border-[#0a0a0a] flex items-center justify-center">
+                <Bell className="h-3 w-3 text-white" />
+              </span>
             </span>
-          </span>
-        )}
-      </button>
+          )}
+        </button>
+      )}
     </div>
   );
 }
