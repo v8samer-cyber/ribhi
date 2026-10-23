@@ -75,6 +75,7 @@ export default function QuizGame() {
   const handleGameChange = (gameId: string) => {
     if (gameId === 'memory') {
       alert(t.selectGameError);
+      setSelectedGame('quiz');
     } else {
       setSelectedGame(gameId);
     }
@@ -253,12 +254,10 @@ export default function QuizGame() {
         <div className="w-full max-w-sm">
           <button onClick={handleLeaveGame} className="flex items-center gap-2 text-gray-400 mb-6 hover:text-white"><ArrowLeft className={`h-5 w-5 ${lang === 'ar' ? 'rotate-180' : ''}`} /> {t.leave}</button>
           
-          {/* 👇 توهج أقوى للحاوية الرئيسية 👇 */}
           <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_50px_rgba(20,184,166,0.2)]">
             <div className="flex justify-between items-center mb-6 bg-[#0a0a0a] p-3 rounded-xl border border-gray-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">{t.you} ({mySymbol})</div>
-                {/* 👇 توهج قوي جداً للأرقام 👇 */}
                 <div className="text-4xl font-bold text-teal-400 drop-shadow-[0_0_25px_rgba(20,184,166,1)]">{mySymbol === 'X' ? gameRoom?.p1_score : gameRoom?.p2_score}</div>
               </div>
               <div className="text-xs text-gray-500 text-center">
@@ -328,14 +327,11 @@ export default function QuizGame() {
           </button>
         </div>
 
-        {/* 👇 توهج قوي للبطاقة الرئيسية 👇 */}
         <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_60px_rgba(20,184,166,0.15)] relative overflow-hidden">
           
-          {/* توهج خلفي خفي لإعطاء طابع النيون */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-teal-500/20 blur-[80px] pointer-events-none"></div>
 
           <div className="flex justify-center mb-4 relative z-10">
-            {/* 👇 توهج أيقونة السيفين 👇 */}
             <Swords className="h-20 w-20 text-teal-400 drop-shadow-[0_0_35px_rgba(20,184,166,1)]" />
           </div>
           <h1 className="text-3xl font-bold text-center mb-1 relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-blue-400 drop-shadow-[0_0_10px_rgba(20,184,166,0.5)]">{t.title}</h1>
@@ -384,7 +380,6 @@ export default function QuizGame() {
             </div>
           </div>
 
-          {/* 👇 توهج قوي جداً لزر اللعب أونلاين 👇 */}
           <button onClick={playOnline} disabled={isSearching || selectedGame !== 'quiz'} className="w-full bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-400 hover:to-blue-400 text-white py-4 rounded-xl font-bold text-lg mb-6 shadow-[0_0_30px_rgba(20,184,166,0.8)] hover:shadow-[0_0_50px_rgba(20,184,166,1)] transition-all flex items-center justify-center gap-3 disabled:opacity-50 relative z-10">
             {isSearching ? (
               <span className="animate-pulse flex items-center gap-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">Finding Opponent...</span>

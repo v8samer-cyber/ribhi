@@ -11,7 +11,7 @@ import Profile from '@/pages/Profile';
 import TasksHistory from '@/pages/TasksHistory';
 import Admin from '@/pages/Admin';
 import ChatWidget from '@/components/ChatWidget';
-import QuizGame from '@/pages/QuizGame'; // 👈 استدعاء صفحة اللعبة مباشرة
+import QuizGame from '@/pages/QuizGame'; // 👈 نستخدم صفحة اللعبة مباشرة
 
 function Pages() {
   const { page, user } = useApp();
@@ -22,8 +22,7 @@ function Pages() {
     case 'signup': return <SignUp />;
     case 'earn': return user ? <Earn /> : <SignIn />;
     case 'cashout': return user ? <Cashout /> : <SignIn />;
-    // 👇 يفتح صفحة التحدي مباشرة
-    case 'games': return user ? <QuizGame /> : <SignIn />; 
+    case 'games': return user ? <QuizGame /> : <SignIn />; // 👈 يفتح اللعبة مباشرة
     case 'affiliates': return user ? <Affiliates /> : <SignIn />;
     case 'profile': return user ? <Profile /> : <SignIn />;
     case 'tasks': return user ? <TasksHistory /> : <SignIn />;
