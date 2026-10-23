@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useApp, AppProvider } from '@/context/AppContext';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -38,17 +37,7 @@ function Shell() {
   const isAdminPage = page === 'admin';
   const showNav = !isAdminPage;
 
-  // 👇 إضافة كود إعلانات OnClicka ليعمل في كل الموقع
-  useEffect(() => {
-    // التأكد من عدم تكرار السكريبت إذا تم تحديث المكون
-    if (!document.querySelector('script[data-admpid="469516"]')) {
-      const script = document.createElement('script');
-      script.src = "https://js.onclckmn.com/static/onclicka.js";
-      script.async = true;
-      script.setAttribute('data-admpid', '469516'); // رقم إعلانك
-      document.body.appendChild(script);
-    }
-  }, []);
+  // تم إزالة سكريبت OnClicka لحماية الموقع من الشاشة السوداء
 
   return (
     <div className="min-h-screen bg-black text-white">
