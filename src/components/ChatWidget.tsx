@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
-import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User, UserPlus, ShieldAlert, Trash2 } from 'lucide-react';
+import { MessageCircle, X, Send, Bell, Ban, ArrowLeft, User, UserPlus, ShieldAlert, Trash2, Clock } from 'lucide-react';
 import { ProfanityFilter } from "@nzrm/text-shield";
 
 const filter = new ProfanityFilter({ languages: ["en", "ar"] });
@@ -62,6 +62,9 @@ export default function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeChatRef = useRef<any>(null);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+
+  // 👇 طابور الرسائل المعلقة (لإرسالها عند عودة الإنترنت) 👇
+  const pendingQueue = useRef<any[]>([]);
 
   const fetchData = async () => {
     if (!user?.email) return;
@@ -137,53 +140,87 @@ export default function ChatWidget() {
     };
   }, [user?.email]); 
 
+  // 👇 نظام إعادة المحاولة التلقائي (عندما يعود الإنترنت) 👇
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!navigator.onLine || pendingQueue.current.length === 0) return;
+
+      // نأخذ أول رسالة في الطابور
+      const item = pendingQueue.current[0];
+      let error = null;
+      let data = null;
+
+      if (item.type === 'public') {
+        const res = await supabase.from('public_chat').insert([{ 
+          user_email: item.msg.user_email, 
+          username: item.msg.username, 
+          message: item.msg.message 
+        }]).select().single();
+        error = res.error; data = res.data;
+        
+        if (!error && data) {
+          setPublicMessages(prev => prev.map(m => m.id === item.msg.id ? { ...data, isPending: false } : m));
+        }
+      } else {
+        const res = await supabase.from('private_messages').insert([{ 
+          sender_email: item.msg.sender_email, 
+          receiver_email: item.msg.receiver_email, 
+          message: item.msg.message 
+        }]).select().single();
+        error = res.error; data = res.data;
+        
+        if (!error && data) {
+          setPrivateMessages(prev => prev.map(m => m.id === item.msg.id ? { ...data, isPending: false } : m));
+        }
+      }
+
+      if (!error) {
+        pendingQueue.current.shift(); // إزالة الرسالة من الطابور بعد نجاح إرسالها
+      }
+    }, 3000); // يفحص كل 3 ثواني
+
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
 
-  // 👇 الإرسال المباشر (بدون أي خدع مؤقتة، إما يحفظ أو يظهر خطأ) 👇
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
 
     const messageToSend = filter.clean(newMessage);
-    setNewMessage(''); // تصفير الحقل فوراً
+    setNewMessage(''); 
 
     if (activeChat) {
       const iBlockedThem = blockedEmails.includes(activeChat.email);
       const theyBlockedMe = blockedByEmails.includes(activeChat.email);
 
       if (iBlockedThem || theyBlockedMe) {
-        alert(t.blockedReason);
-        setNewMessage(messageToSend);
+        const blockedMsg = {
+          id: `temp-${Date.now()}`, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend,
+          created_at: new Date().toISOString(), isBlockedMsg: true,
+          blockReason: theyBlockedMe ? t.blockedReason : t.iBlockedReason
+        };
+        setPrivateMessages(prev => [...prev, blockedMsg]);
         return; 
       }
 
-      const { data, error } = await supabase.from('private_messages').insert([{ 
-        sender_email: user.email, 
-        receiver_email: activeChat.email, 
-        message: messageToSend 
-      }]).select().single();
+      const tempId = `temp-${Date.now()}`;
+      const tempMsg = { id: tempId, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend, created_at: new Date().toISOString(), isPending: true };
+      setPrivateMessages(prev => [...prev, tempMsg]);
       
-      if (error) {
-        alert("خطأ في الحفظ: " + error.message);
-        setNewMessage(messageToSend); // إعادة النص للخانة
-      } else if (data) {
-        setPrivateMessages(prev => [...prev, data]); // إضافة الرسالة بعد تأكيد الحفظ
-      }
+      // إضافة الرسالة لطابور الانتظار
+      pendingQueue.current.push({ type: 'private', msg: tempMsg });
+      
     } else {
-      const { data, error } = await supabase.from('public_chat').insert([{ 
-        user_email: user.email, 
-        username: user.email.split('@')[0], 
-        message: messageToSend 
-      }]).select().single();
-      
-      if (error) {
-        alert("خطأ في الحفظ: " + error.message);
-        setNewMessage(messageToSend); // إعادة النص للخانة
-      } else if (data) {
-        setPublicMessages(prev => [...prev, data]); // إضافة الرسالة بعد تأكيد الحفظ
-      }
+      const tempId = `temp-${Date.now()}`;
+      const tempMsg = { id: tempId, user_email: user.email, username: user.email.split('@')[0], message: messageToSend, created_at: new Date().toISOString(), isPending: true };
+      setPublicMessages(prev => [...prev, tempMsg]);
+
+      // إضافة الرسالة لطابور الانتظار
+      pendingQueue.current.push({ type: 'public', msg: tempMsg });
     }
   };
 
@@ -382,7 +419,11 @@ export default function ChatWidget() {
                       </button>
                     )}
                   </div>
-                  <div dir="auto" className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>{msg.message}</div>
+                  <div dir="auto" className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm flex items-center gap-2 ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>
+                    {msg.message}
+                    {/* 👇 أيقونة الساعة تظهر فقط إذا كانت الرسالة معلقة 👇 */}
+                    {msg.isPending && <Clock className="h-3 w-3 text-gray-300 animate-pulse" />}
+                  </div>
                 </div>
               );
             })}
@@ -415,23 +456,24 @@ export default function ChatWidget() {
 
             {activeChat && privateMessages.map((msg, index) => {
               const isMe = msg.sender_email === user?.email;
-              const blockText = msg.blockReason?.includes('blocked you') || msg.blockReason?.includes('تم حظرك') ? t.blockedReason : t.iBlockedReason;
-
+              
               return (
                 <div key={index} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   <span className="text-[9px] text-gray-500 mb-0.5">{isMe ? t.you : activeChat.username}</span>
                   
-                  <div dir="auto" className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm ${
+                  <div dir="auto" className={`px-3 py-1.5 rounded-xl max-w-[85%] text-sm flex items-center gap-2 ${
                     msg.isBlockedMsg 
                       ? 'bg-red-900/40 border border-red-500/50 text-red-100 opacity-80' 
                       : (isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none')
                   }`}>
                     {msg.message}
+                    {/* 👇 أيقونة الساعة تظهر فقط إذا كانت الرسالة معلقة 👇 */}
+                    {msg.isPending && <Clock className="h-3 w-3 text-gray-300 animate-pulse" />}
                   </div>
 
                   {msg.isBlockedMsg && (
                     <span className="text-[10px] text-red-500 mt-1 font-bold">
-                      {blockText}
+                      {msg.blockReason}
                     </span>
                   )}
                 </div>
