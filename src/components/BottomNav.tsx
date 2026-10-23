@@ -1,11 +1,13 @@
 import { useApp } from '@/context/AppContext';
-import { Trophy, Wallet, HandCoins, Users, User } from 'lucide-react';
+// 👇 استبدلنا Trophy بـ Swords (سيفين) لتناسب الألعاب
+import { Swords, Wallet, HandCoins, Users, User } from 'lucide-react';
 
 export default function BottomNav() {
   const { page, navigate } = useApp();
 
   const tabs = [
-    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
+    // 👇 غيرنا الـ id إلى games والاسم إلى Games والأيقونة إلى Swords
+    { id: 'games', label: 'Games', icon: Swords },
     { id: 'cashout', label: 'Cashout', icon: Wallet },
     { id: 'earn', label: 'Earn', icon: HandCoins },
     { id: 'affiliates', label: 'Affiliates', icon: Users },

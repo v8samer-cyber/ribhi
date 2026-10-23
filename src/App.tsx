@@ -11,7 +11,8 @@ import Affiliates from '@/pages/Affiliates';
 import Profile from '@/pages/Profile';
 import TasksHistory from '@/pages/TasksHistory';
 import Admin from '@/pages/Admin';
-import ChatWidget from '@/components/ChatWidget'; // 👈 1. استيراد الدردشة
+import ChatWidget from '@/components/ChatWidget';
+import GamesLobby from '@/pages/GamesLobby'; // 👈 إضافة صفحة الألعاب الجديدة
 
 function Pages() {
   const { page, user } = useApp();
@@ -22,19 +23,19 @@ function Pages() {
     case 'signup': return <SignUp />;
     case 'earn': return user ? <Earn /> : <SignIn />;
     case 'cashout': return user ? <Cashout /> : <SignIn />;
-    case 'leaderboard': return user ? <Leaderboard /> : <SignIn />;
+    // 👇 غيرنا leaderboard إلى games لكي يفتح صفحة الألعاب
+    case 'games': return user ? <GamesLobby /> : <SignIn />;
     case 'affiliates': return user ? <Affiliates /> : <SignIn />;
     case 'profile': return user ? <Profile /> : <SignIn />;
     case 'tasks': return user ? <TasksHistory /> : <SignIn />;
     case 'admin': 
-      // حماية: لا يدخل إلا الأدمن
       return (user && user.role === 'admin') ? <Admin /> : <Home />;
     default: return <Home />;
   }
 }
 
 function Shell() {
-  const { page, user } = useApp(); // 👈 2. أضفنا user هنا لكي نعرف هل المستخدم مسجل دخول أم لا
+  const { page, user } = useApp(); 
   const isAdminPage = page === 'admin';
   const showNav = !isAdminPage;
 
@@ -45,10 +46,7 @@ function Shell() {
         <Pages />
       </main>
       {showNav && <BottomNav />}
-      
-      {/* 👇 3. إضافة الدردشة (تظهر فقط إذا كان المستخدم مسجل دخول وليس في صفحة الأدمن) */}
       {showNav && user && <ChatWidget />}
-      
     </div>
   );
 }
