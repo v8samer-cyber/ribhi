@@ -3,14 +3,41 @@ import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Swords, Trophy, Timer, Globe, ChevronDown, CheckCircle2, XCircle, Loader2, Search, Info, X } from 'lucide-react';
 
+// 👇 بنك أسئلة ضخم ومتنوع (رياضيات، جغرافيا، علوم، معلومات عامة) 👇
 const QUESTIONS = [
+  // رياضيات
   { q: "5 + 7 = ?", options: ["10", "12", "14"], answer: "12" },
   { q: "9 * 3 = ?", options: ["27", "21", "24"], answer: "27" },
   { q: "15 - 8 = ?", options: ["5", "7", "9"], answer: "7" },
+  { q: "12 / 4 = ?", options: ["2", "3", "4"], answer: "3" },
+  { q: "10 + 20 = ?", options: ["20", "30", "40"], answer: "30" },
+  { q: "2 * 2 * 2 = ?", options: ["6", "8", "10"], answer: "8" },
+  { q: "50 - 15 = ?", options: ["30", "35", "40"], answer: "35" },
+  { q: "7 * 7 = ?", options: ["42", "49", "56"], answer: "49" },
+  // معلومات عامة وجغرافيا
   { q: "ما هي عاصمة اليابان؟", options: ["بكين", "طوكيو", "سيول"], answer: "طوكيو" },
   { q: "ما هو أكبر كوكب في المجموعة الشمسية؟", options: ["المشتري", "زحل", "الأرض"], answer: "المشتري" },
-  { q: "12 / 4 = ?", options: ["2", "3", "4"], answer: "3" },
-  { q: "ما هو ناتج 10 + 20؟", options: ["20", "30", "40"], answer: "30" },
+  { q: "كم عدد أيام الأسبوع؟", options: ["5", "6", "7"], answer: "7" },
+  { q: "ما هو لون السماء؟", options: ["أحمر", "أزرق", "أخضر"], answer: "أزرق" },
+  { q: "ما هي عاصمة فرنسا؟", options: ["لندن", "باريس", "روما"], answer: "باريس" },
+  { q: "ما هي عاصمة العراق؟", options: ["بغداد", "أربيل", "البصرة"], answer: "بغداد" },
+  { q: "ما هو أطول نهر في العالم؟", options: ["النيل", "الأمازون", "دجلة"], answer: "النيل" },
+  { q: "كم عدد قارات العالم؟", options: ["5", "6", "7"], answer: "7" },
+  { q: "ما هو الكوكب الأحمر؟", options: ["الزهرة", "المريخ", "عطارد"], answer: "المريخ" },
+  { q: "ما هي عاصمة مصر؟", options: ["الإسكندرية", "القاهرة", "الجيزة"], answer: "القاهرة" },
+  { q: "في أي قارة تقع مصر؟", options: ["آسيا", "أفريقيا", "أوروبا"], answer: "أفريقيا" },
+  { q: "ما هي عملة اليابان؟", options: ["اليوان", "الين", "الوون"], answer: "الين" },
+  // علوم وطبيعة
+  { q: "ما هو الغاز الذي نتنفسه؟", options: ["النيتروجين", "الأكسجين", "ثاني أكسيد الكربون"], answer: "الأكسجين" },
+  { q: "ما هي أكبر حيوانات العالم؟", options: ["الفيل", "الحوت الأزرق", "الزرافة"], answer: "الحوت الأزرق" },
+  { q: "كم عدد قلوب الأخطبوط؟", options: ["1", "2", "3"], answer: "3" },
+  { q: "ما هو أسرع حيوان بري؟", options: ["الأسد", "الفهد", "الحصان"], answer: "الفهد" },
+  { q: "ما هو أكبر محيط في العالم؟", options: ["الأطلسي", "الهندي", "الهادي"], answer: "الهادي" },
+  { q: "ما هو المعدن السائل في درجة حرارة الغرفة؟", options: ["الحديد", "الزئبق", "الرصاص"], answer: "الزئبق" },
+  { q: "ما هي الصحراء الأكبر في العالم؟", options: ["الصحراء الكبرى", "صحراء الربع الخالي", "صحراء غوبي"], answer: "الصحراء الكبرى" },
+  { q: "كم عدد أسنان الإنسان البالغ؟", options: ["28", "32", "30"], answer: "32" },
+  { q: "ما هو العضو المسؤول عن ضخ الدم؟", options: ["الرئة", "القلب", "الكبد"], answer: "القلب" },
+  { q: "ما هي اللغة الأكثر تحدثاً في العالم؟", options: ["الإنجليزية", "الصينية", "الإسبانية"], answer: "الصينية" }
 ];
 
 const T = {
@@ -22,9 +49,10 @@ const T = {
     gameSelect: 'Select Game', free: 'Free Play', points: 'Points',
     waiting: 'Searching for a real opponent...', shareCode: 'Room Code:', playing: 'Race to',
     you: 'You', opp: 'Opponent', bet: 'Bet', win: 'You Won! 🎉', lose: 'You Lost 😢', next: 'Next Question', leave: 'Leave Game',
-    confirmLeave: 'Are you sure you want to leave? You will lose the game.',
+    confirmLeave: 'Are you sure you want to leave? You will lose the game and the bet.',
     quizGame: 'Quiz Duel', freeMatch: 'Free Match', searchOpponent: 'Searching...',
-    infoTitle: 'How to Play', infoText: 'Welcome to the Arena!\n\n1. Choose your wager and points to win.\n2. Click "Play Online" to find a random opponent.\n3. Or create a private room and share the code with a friend.\n4. Answer questions faster than your opponent to win the prize!', close: 'Got it!'
+    infoTitle: 'How to Play', infoText: 'Welcome to the Arena!\n\n1. Choose your wager and points to win.\n2. Click "Play Online" to find a random opponent.\n3. Or create a private room and share the code with a friend.\n4. Answer questions faster than your opponent to win the prize!\n5. Warning: If you leave the game, you automatically lose!', close: 'Got it!',
+    oppLeft: 'Opponent left! You win by default.'
   },
   ar: {
     back: 'رجوع', title: 'صالة التحدي', sub: 'تحدى أصدقاءك أو لاعبين عبر الإنترنت!',
@@ -34,10 +62,17 @@ const T = {
     gameSelect: 'اختر اللعبة', free: 'لعب مجاني', points: 'نقاط',
     waiting: 'جاري البحث عن خصم حقيقي...', shareCode: 'كود الغرفة:', playing: 'أول من يجمع',
     you: 'أنت', opp: 'الخصم', bet: 'رهان', win: 'أنت الفائز! 🎉', lose: 'للأسف، خسرت 😢', next: 'السؤال التالي', leave: 'مغادرة اللعبة',
-    confirmLeave: 'هل أنت متأكد من المغادرة؟ سوف تخسر اللعبة.',
+    confirmLeave: 'هل أنت متأكد من المغادرة؟ سوف تخسر اللعبة والرهان.',
     quizGame: 'تحدي الذكاء', freeMatch: 'مباراة مجانية', searchOpponent: 'جاري البحث...',
-    infoTitle: 'كيف تلعب؟', infoText: 'مرحباً بك في صالة التحدي!\n\n1. اختر مبلغ الرهان وعدد النقاط للفوز.\n2. اضغط "لعب عبر الإنترنت" للبحث عن خصم عشوائي.\n3. أو أنشئ غرفة خاصة وشارك الكود مع صديقك.\n4. أجب على الأسئلة أسرع من خصمك لتربح الجائزة!', close: 'فهمت!'
+    infoTitle: 'كيف تلعب؟', infoText: 'مرحباً بك في صالة التحدي!\n\n1. اختر مبلغ الرهان وعدد النقاط للفوز.\n2. اضغط "لعب عبر الإنترنت" للبحث عن خصم عشوائي.\n3. أو أنشئ غرفة خاصة وشارك الكود مع صديقك.\n4. أجب على الأسئلة أسرع من خصمك لتربح الجائزة!\n5. تحذير: إذا خرجت من اللعبة، فأنت تخسر تلقائياً!', close: 'فهمت!',
+    oppLeft: 'الخصم غادر اللعبة! أنت الفائز تلقائياً.'
   }
+};
+
+// 👇 دالة مساعدة لاستخراج اسم المستخدم من الإيميل 👇
+const getUsername = (email: string | undefined) => {
+  if (!email) return '...';
+  return email.split('@')[0];
 };
 
 export default function QuizGame() {
@@ -193,8 +228,14 @@ export default function QuizGame() {
     await supabase.from('game_rooms').update({ current_question_index: gameRoom.current_question_index + 1 }).eq('id', gameRoom.id);
   };
 
-  const handleLeaveGame = () => {
+  const handleLeaveGame = async () => {
     if (window.confirm(t.confirmLeave)) {
+      if (inGame && gameRoom?.status === 'playing' && user?.email) {
+        await supabase.rpc('forfeit_game_secure', {
+          p_room_code: gameRoom.room_code,
+          p_leaving_email: user.email
+        });
+      }
       setInGame(false); setGameRoom(null); setError(''); setIsSearching(false);
       window.location.reload(); 
     }
@@ -203,8 +244,12 @@ export default function QuizGame() {
   // ================= شاشة اللعب =================
   if (inGame) {
     const currentQ = QUESTIONS[gameRoom?.current_question_index % QUESTIONS.length];
-    // 👇 الشرط الصارم: يجب أن يكون هناك خصم حقيقي لكي تبدأ اللعبة 👇
     const hasRealOpponent = !!gameRoom?.player2_email;
+    
+    // 👇 استخراج أسماء اللاعبين 👇
+    const myName = getUsername(user?.email);
+    const opponentEmail = gameRoom?.player1_email === user?.email ? gameRoom?.player2_email : gameRoom?.player1_email;
+    const oppName = getUsername(opponentEmail);
 
     return (
       <div className={`fixed inset-0 z-[100] bg-[#0a0a0a] text-white flex flex-col overflow-hidden`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -222,19 +267,20 @@ export default function QuizGame() {
           <div className="w-full max-w-sm">
             <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_50px_rgba(20,184,166,0.2)]">
               
+              {/* 👇 عرض أسماء اللاعبين هنا 👇 */}
               <div className="flex justify-between items-center mb-6 bg-[#0a0a0a] p-3 rounded-xl border border-gray-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
-                <div className="text-center">
-                  <div className="text-xs text-gray-400 mb-1">{t.you} ({mySymbol})</div>
+                <div className="text-center w-1/3">
+                  <div className="text-[11px] text-teal-300 font-bold mb-1 truncate px-1">{myName} ({mySymbol})</div>
                   <div className="text-4xl font-bold text-teal-400 drop-shadow-[0_0_25px_rgba(20,184,166,1)]">{mySymbol === 'X' ? gameRoom?.p1_score : gameRoom?.p2_score}</div>
                 </div>
-                <div className="text-xs text-gray-500 text-center">
-                  <div className="bg-gray-800 px-3 py-1 rounded-full mb-1 border border-gray-700 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.3)]">
+                <div className="text-xs text-gray-500 text-center w-1/3">
+                  <div className="bg-gray-800 px-2 py-1 rounded-full mb-1 border border-gray-700 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.3)] whitespace-nowrap">
                     {gameRoom?.wager === 0 ? t.freeMatch : `${t.bet}: ${gameRoom?.wager}`}
                   </div>
-                  <div>{t.playing} {gameRoom?.target_score}</div>
+                  <div className="text-[10px]">{t.playing} {gameRoom?.target_score}</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-xs text-gray-400 mb-1">{t.opp} ({mySymbol === 'X' ? 'O' : 'X'})</div>
+                <div className="text-center w-1/3">
+                  <div className="text-[11px] text-orange-300 font-bold mb-1 truncate px-1">{oppName} ({mySymbol === 'X' ? 'O' : 'X'})</div>
                   <div className="text-4xl font-bold text-orange-400 drop-shadow-[0_0_25px_rgba(251,146,60,1)]">{mySymbol === 'X' ? gameRoom?.p2_score : gameRoom?.p1_score}</div>
                 </div>
               </div>
@@ -406,7 +452,6 @@ export default function QuizGame() {
             {t.create}
           </button>
 
-          {/* 👇 إصلاح تداخل زر الانضمام وكود الغرفة باستخدام Grid 👇 */}
           <div className="grid grid-cols-3 gap-2 relative z-10">
             <input 
               type="text" 
