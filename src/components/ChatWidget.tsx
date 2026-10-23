@@ -58,10 +58,14 @@ export default function ChatWidget() {
   
   const [hasUnreadPrivate, setHasUnreadPrivate] = useState(false);
   const [unreadSenders, setUnreadSenders] = useState<{[key: string]: boolean}>({});
-  const lastReadPrivateRef = useRef<string>(new Date(0).toISOString());
-
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // لحفظ حالة المحادثة الحالية وتجنب قطع الاتصال
+  const activeChatRef = useRef<any>(null);
+  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
+  // دالة جلب البيانات الأولية
   const fetchData = async () => {
     if (!user?.email) return;
     
@@ -91,78 +95,77 @@ export default function ChatWidget() {
     if (blocksBy) setBlockedByEmails(blocksBy.map(b => b.blocker_email));
   };
 
+  // جلب الرسائل الخاصة فقط عند تغيير المحادثة
   useEffect(() => {
+    if (!activeChat || !user?.email) return;
+    
+    const fetchPrivate = async () => {
+      const { data } = await supabase.from('private_messages').select('*')
+        .or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`)
+        .order('created_at', { ascending: true }).limit(50);
+      if (data) setPrivateMessages(data);
+    };
+    fetchPrivate();
+  }, [activeChat?.email, user?.email]);
+
+  // 👇 نظام الاستماع الفوري (يعمل مرة واحدة فقط ولا يتأثر بالتنقل) 👇
+  useEffect(() => {
+    if (!user?.email) return;
+    
     fetchData();
 
-    const interval = setInterval(async () => {
-      if (!user?.email) return;
-      
-      const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
-      if (req) setRequests(prev => JSON.stringify(prev) !== JSON.stringify(req) ? req : prev);
+    const publicChannel = supabase.channel('realtime_public_chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'public_chat' }, (payload) => {
+        setPublicMessages(prev => {
+          if (prev.some(m => m.id === payload.new.id)) return prev;
+          // دمج ذكي للرسائل المؤقتة
+          const tempIndex = prev.findIndex(m => String(m.id).startsWith('temp-') && m.message === payload.new.message && m.user_email === payload.new.user_email);
+          if (tempIndex !== -1) {
+            const newArr = [...prev];
+            newArr[tempIndex] = payload.new;
+            return newArr;
+          }
+          return [...prev, payload.new];
+        });
+      }).subscribe();
 
-      // دمج الرسائل العامة (بدون مسح الرسائل المحلية)
-      if (!activeChat) {
-        const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
-        if (pub) {
-          setPublicMessages(prev => {
-            const tempMsgs = prev.filter(m => String(m.id).startsWith('temp-'));
-            const combined = [...pub];
-            tempMsgs.forEach(tm => {
-              if (!combined.some(m => m.message === tm.message && m.user_email === tm.user_email)) {
-                combined.push(tm);
-              }
-            });
-            return combined.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
-          });
+    const privateChannel = supabase.channel('realtime_private_chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
+        const msg = payload.new;
+        
+        if (msg.receiver_email === user.email) {
+          setUnreadSenders(prev => ({ ...prev, [msg.sender_email]: true }));
+          if (!isOpen || activeTab !== 'private' || !activeChatRef.current) {
+            setHasUnreadPrivate(true);
+          }
         }
-      } else {
-        const { data: priv } = await supabase.from('private_messages').select('*').or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`).order('created_at', { ascending: true }).limit(50);
-        if (priv) {
+
+        if (activeChatRef.current && (msg.sender_email === activeChatRef.current.email || msg.receiver_email === activeChatRef.current.email)) {
           setPrivateMessages(prev => {
-            const tempMsgs = prev.filter(m => String(m.id).startsWith('temp-'));
-            const combined = [...priv];
-            tempMsgs.forEach(tm => {
-              if (!combined.some(m => m.message === tm.message && m.sender_email === tm.sender_email)) {
-                combined.push(tm);
-              }
-            });
-            return combined.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
-          });
-        }
-      }
-
-      if (!isOpen || activeTab !== 'private' || !activeChat) {
-        const { data: latestPrivate } = await supabase.from('private_messages').select('sender_email, created_at').eq('receiver_email', user.email).order('created_at', { ascending: false }).limit(5);
-        if (latestPrivate && latestPrivate.length > 0) {
-          let newUnread = false;
-          const newSenders = { ...unreadSenders };
-          latestPrivate.forEach(msg => {
-            if (msg.created_at > lastReadPrivateRef.current && msg.sender_email !== user.email) {
-              newSenders[msg.sender_email] = true;
-              newUnread = true;
+            if (prev.some(m => m.id === msg.id)) return prev;
+            const tempIndex = prev.findIndex(m => String(m.id).startsWith('temp-') && m.message === msg.message && m.sender_email === msg.sender_email);
+            if (tempIndex !== -1) {
+              const newArr = [...prev];
+              newArr[tempIndex] = msg;
+              return newArr;
             }
+            return [...prev, msg];
           });
-          setHasUnreadPrivate(newUnread);
-          setUnreadSenders(newSenders);
         }
-      }
-    }, 2000);
+      }).subscribe();
 
-    return () => clearInterval(interval);
-  }, [user, activeChat, isOpen, activeTab, unreadSenders]);
+    return () => {
+      supabase.removeChannel(publicChannel);
+      supabase.removeChannel(privateChannel);
+    };
+  }, [user?.email]); 
 
-  useEffect(() => {
-    if (isOpen && activeTab === 'private' && !activeChat) {
-      setHasUnreadPrivate(false);
-      lastReadPrivateRef.current = new Date().toISOString();
-    }
-  }, [isOpen, activeTab, activeChat]);
-
+  // النزول لآخر رسالة
   useEffect(() => {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
 
-  // إرسال رسالة (بدون فلتر روابط + إرسال فوري)
+  // 👇 دالة الإرسال (مضمونة 100% ولا تختفي) 👇
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
@@ -188,26 +191,32 @@ export default function ChatWidget() {
       const tempMsg = { id: tempId, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend, created_at: new Date().toISOString() };
       setPrivateMessages(prev => [...prev, tempMsg]);
 
-      const { data, error } = await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]).select();
+      const { data, error } = await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]).select().single();
       
       if (error) {
         alert("Error: " + error.message);
         setPrivateMessages(prev => prev.filter(m => m.id !== tempId)); 
       } else if (data) {
-        setPrivateMessages(prev => prev.map(m => m.id === tempId ? data[0] : m));
+        setPrivateMessages(prev => {
+          if (prev.some(m => m.id === data.id)) return prev.filter(m => m.id !== tempId);
+          return prev.map(m => m.id === tempId ? data : m);
+        });
       }
     } else {
       const tempId = `temp-${Date.now()}`;
       const tempMsg = { id: tempId, user_email: user.email, username: user.email.split('@')[0], message: messageToSend, created_at: new Date().toISOString() };
       setPublicMessages(prev => [...prev, tempMsg]);
 
-      const { data, error } = await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]).select();
+      const { data, error } = await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]).select().single();
       
       if (error) {
         alert("Error: " + error.message);
         setPublicMessages(prev => prev.filter(m => m.id !== tempId)); 
       } else if (data) {
-        setPublicMessages(prev => prev.map(m => m.id === tempId ? data[0] : m));
+        setPublicMessages(prev => {
+          if (prev.some(m => m.id === data.id)) return prev.filter(m => m.id !== tempId);
+          return prev.map(m => m.id === tempId ? data : m);
+        });
       }
     }
   };
@@ -215,6 +224,7 @@ export default function ChatWidget() {
   const openChat = (friend: any) => {
     setActiveChat(friend);
     setUnreadSenders(prev => ({ ...prev, [friend.email]: false }));
+    setHasUnreadPrivate(false);
   };
 
   const sendFriendRequest = async () => {
