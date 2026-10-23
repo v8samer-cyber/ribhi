@@ -1,53 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Star, Flame, PlayCircle, Video, Zap, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase'; 
+import { Star, Flame, PlayCircle, Video, Zap } from 'lucide-react';
 
 export default function Earn() {
   const { user } = useApp();
   const userId = user ? encodeURIComponent(user.email) : '';
   const [activeTab, setActiveTab] = useState<'offers' | 'videos'>('offers');
-  const [isWatching, setIsWatching] = useState(false);
-
-  // تحميل سكريبت OnClicka عند فتح الصفحة
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = "https://js.onclckmn.com/static/onclicka.js";
-    script.async = true;
-    script.setAttribute('data-admpid', '469516');
-    document.body.appendChild(script);
-
-    return () => {
-      const existingScript = document.querySelector('script[data-admpid="469516"]');
-      if (existingScript) {
-        document.body.removeChild(existingScript);
-      }
-    };
-  }, []);
-
-  // دالة مشاهدة الإعلان وإضافة النقاط
-  const handleWatchAd = async () => {
-    if (!user?.email) return;
-    
-    setIsWatching(true);
-    
-    // محاكاة وقت مشاهدة الفيديو (مثلاً 10 ثوانٍ)
-    setTimeout(async () => {
-      try {
-        const { data, error } = await supabase.rpc('claim_video_reward', {
-          p_email: user.email
-        });
-
-        if (error) throw error;
-        
-        alert("تمت إضافة 1 LE إلى رصيدك! شكراً لمشاهدتك.");
-      } catch (err: any) {
-        alert("حدث خطأ: " + err.message);
-      } finally {
-        setIsWatching(false);
-      }
-    }, 10000); // 10 ثوانٍ (يمكنك تغييرها لاحقاً)
-  };
 
   const partners = [
     {
@@ -81,6 +39,11 @@ export default function Earn() {
       desc: 'Complete offers & surveys'
     }
   ];
+
+  // دالة الزر المؤقتة (لأننا سنبحث عن شركة جديدة)
+  const handleComingSoon = () => {
+    alert("إعلانات الفيديو قادمة قريباً! جاري ربط مزود خدمة جديد لضمان أفضل أرباح. (ترقبوا التحديثات).");
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-24">
@@ -172,20 +135,14 @@ export default function Earn() {
             </p>
 
             <button 
-              onClick={handleWatchAd}
-              disabled={isWatching}
-              className={`w-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white py-4 rounded-xl font-bold text-lg shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all flex items-center justify-center gap-2 ${isWatching ? 'opacity-70 cursor-not-allowed' : ''}`}
+              onClick={handleComingSoon}
+              className="w-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white py-4 rounded-xl font-bold text-lg shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all flex items-center justify-center gap-2"
             >
-              {isWatching ? (
-                <><Loader2 className="h-6 w-6 animate-spin" /> Watching Ad...</>
-              ) : (
-                <><PlayCircle className="h-6 w-6" /> Start Watching</>
-              )}
+              <PlayCircle className="h-6 w-6" /> Start Watching
             </button>
 
             <div className="mt-4 flex items-center gap-2 text-xs text-purple-300 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20">
-              <Zap className="h-3 w-3" />
-              Limit: 20 videos / 24 hours
+              <Zap className="h-3 w-3" /> Limit: 20 videos / 24 hours
             </div>
           </div>
         </div>
