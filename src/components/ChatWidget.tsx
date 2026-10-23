@@ -60,12 +60,9 @@ export default function ChatWidget() {
   const [unreadSenders, setUnreadSenders] = useState<{[key: string]: boolean}>({});
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // لحفظ حالة المحادثة الحالية وتجنب قطع الاتصال
   const activeChatRef = useRef<any>(null);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
-  // دالة جلب البيانات الأولية
   const fetchData = async () => {
     if (!user?.email) return;
     
@@ -95,7 +92,6 @@ export default function ChatWidget() {
     if (blocksBy) setBlockedByEmails(blocksBy.map(b => b.blocker_email));
   };
 
-  // جلب الرسائل الخاصة فقط عند تغيير المحادثة
   useEffect(() => {
     if (!activeChat || !user?.email) return;
     
@@ -108,23 +104,14 @@ export default function ChatWidget() {
     fetchPrivate();
   }, [activeChat?.email, user?.email]);
 
-  // 👇 نظام الاستماع الفوري (يعمل مرة واحدة فقط ولا يتأثر بالتنقل) 👇
   useEffect(() => {
     if (!user?.email) return;
-    
     fetchData();
 
     const publicChannel = supabase.channel('realtime_public_chat')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'public_chat' }, (payload) => {
         setPublicMessages(prev => {
           if (prev.some(m => m.id === payload.new.id)) return prev;
-          // دمج ذكي للرسائل المؤقتة
-          const tempIndex = prev.findIndex(m => String(m.id).startsWith('temp-') && m.message === payload.new.message && m.user_email === payload.new.user_email);
-          if (tempIndex !== -1) {
-            const newArr = [...prev];
-            newArr[tempIndex] = payload.new;
-            return newArr;
-          }
           return [...prev, payload.new];
         });
       }).subscribe();
@@ -132,23 +119,13 @@ export default function ChatWidget() {
     const privateChannel = supabase.channel('realtime_private_chat')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
         const msg = payload.new;
-        
         if (msg.receiver_email === user.email) {
           setUnreadSenders(prev => ({ ...prev, [msg.sender_email]: true }));
-          if (!isOpen || activeTab !== 'private' || !activeChatRef.current) {
-            setHasUnreadPrivate(true);
-          }
+          if (!isOpen || activeTab !== 'private' || !activeChatRef.current) setHasUnreadPrivate(true);
         }
-
         if (activeChatRef.current && (msg.sender_email === activeChatRef.current.email || msg.receiver_email === activeChatRef.current.email)) {
           setPrivateMessages(prev => {
             if (prev.some(m => m.id === msg.id)) return prev;
-            const tempIndex = prev.findIndex(m => String(m.id).startsWith('temp-') && m.message === msg.message && m.sender_email === msg.sender_email);
-            if (tempIndex !== -1) {
-              const newArr = [...prev];
-              newArr[tempIndex] = msg;
-              return newArr;
-            }
             return [...prev, msg];
           });
         }
@@ -160,63 +137,52 @@ export default function ChatWidget() {
     };
   }, [user?.email]); 
 
-  // النزول لآخر رسالة
   useEffect(() => {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
 
-  // 👇 دالة الإرسال (مضمونة 100% ولا تختفي) 👇
+  // 👇 الإرسال المباشر (بدون أي خدع مؤقتة، إما يحفظ أو يظهر خطأ) 👇
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
 
     const messageToSend = filter.clean(newMessage);
-    setNewMessage('');
+    setNewMessage(''); // تصفير الحقل فوراً
 
     if (activeChat) {
       const iBlockedThem = blockedEmails.includes(activeChat.email);
       const theyBlockedMe = blockedByEmails.includes(activeChat.email);
 
       if (iBlockedThem || theyBlockedMe) {
-        const blockedMsg = {
-          id: `temp-${Date.now()}`, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend,
-          created_at: new Date().toISOString(), isBlockedMsg: true,
-          blockReason: theyBlockedMe ? t.blockedReason : t.iBlockedReason
-        };
-        setPrivateMessages(prev => [...prev, blockedMsg]);
+        alert(t.blockedReason);
+        setNewMessage(messageToSend);
         return; 
       }
 
-      const tempId = `temp-${Date.now()}`;
-      const tempMsg = { id: tempId, sender_email: user.email, receiver_email: activeChat.email, message: messageToSend, created_at: new Date().toISOString() };
-      setPrivateMessages(prev => [...prev, tempMsg]);
-
-      const { data, error } = await supabase.from('private_messages').insert([{ sender_email: user.email, receiver_email: activeChat.email, message: messageToSend }]).select().single();
+      const { data, error } = await supabase.from('private_messages').insert([{ 
+        sender_email: user.email, 
+        receiver_email: activeChat.email, 
+        message: messageToSend 
+      }]).select().single();
       
       if (error) {
-        alert("Error: " + error.message);
-        setPrivateMessages(prev => prev.filter(m => m.id !== tempId)); 
+        alert("خطأ في الحفظ: " + error.message);
+        setNewMessage(messageToSend); // إعادة النص للخانة
       } else if (data) {
-        setPrivateMessages(prev => {
-          if (prev.some(m => m.id === data.id)) return prev.filter(m => m.id !== tempId);
-          return prev.map(m => m.id === tempId ? data : m);
-        });
+        setPrivateMessages(prev => [...prev, data]); // إضافة الرسالة بعد تأكيد الحفظ
       }
     } else {
-      const tempId = `temp-${Date.now()}`;
-      const tempMsg = { id: tempId, user_email: user.email, username: user.email.split('@')[0], message: messageToSend, created_at: new Date().toISOString() };
-      setPublicMessages(prev => [...prev, tempMsg]);
-
-      const { data, error } = await supabase.from('public_chat').insert([{ user_email: user.email, username: user.email.split('@')[0], message: messageToSend }]).select().single();
+      const { data, error } = await supabase.from('public_chat').insert([{ 
+        user_email: user.email, 
+        username: user.email.split('@')[0], 
+        message: messageToSend 
+      }]).select().single();
       
       if (error) {
-        alert("Error: " + error.message);
-        setPublicMessages(prev => prev.filter(m => m.id !== tempId)); 
+        alert("خطأ في الحفظ: " + error.message);
+        setNewMessage(messageToSend); // إعادة النص للخانة
       } else if (data) {
-        setPublicMessages(prev => {
-          if (prev.some(m => m.id === data.id)) return prev.filter(m => m.id !== tempId);
-          return prev.map(m => m.id === tempId ? data : m);
-        });
+        setPublicMessages(prev => [...prev, data]); // إضافة الرسالة بعد تأكيد الحفظ
       }
     }
   };
