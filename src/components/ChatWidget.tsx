@@ -100,41 +100,48 @@ export default function ChatWidget() {
       const { data: req } = await supabase.from('chat_requests').select('*').eq('receiver_email', user.email).eq('status', 'pending');
       if (req) setRequests(prev => JSON.stringify(prev) !== JSON.stringify(req) ? req : prev);
 
+      // دمج الرسائل العامة (بدون مسح الرسائل المحلية)
       if (!activeChat) {
         const { data: pub } = await supabase.from('public_chat').select('*').order('created_at', { ascending: true }).limit(50);
-        if (pub) setPublicMessages(prev => {
-          const temp = prev.filter(m => String(m.id).startsWith('temp-'));
-          return [...pub, ...temp].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
-        });
+        if (pub) {
+          setPublicMessages(prev => {
+            const tempMsgs = prev.filter(m => String(m.id).startsWith('temp-'));
+            const combined = [...pub];
+            tempMsgs.forEach(tm => {
+              if (!combined.some(m => m.message === tm.message && m.user_email === tm.user_email)) {
+                combined.push(tm);
+              }
+            });
+            return combined.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
+          });
+        }
       } else {
         const { data: priv } = await supabase.from('private_messages').select('*').or(`and(sender_email.eq.${user.email},receiver_email.eq.${activeChat.email}),and(sender_email.eq.${activeChat.email},receiver_email.eq.${user.email})`).order('created_at', { ascending: true }).limit(50);
-        if (priv) setPrivateMessages(prev => {
-          const temp = prev.filter(m => String(m.id).startsWith('temp-'));
-          return [...priv, ...temp].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
-        });
+        if (priv) {
+          setPrivateMessages(prev => {
+            const tempMsgs = prev.filter(m => String(m.id).startsWith('temp-'));
+            const combined = [...priv];
+            tempMsgs.forEach(tm => {
+              if (!combined.some(m => m.message === tm.message && m.sender_email === tm.sender_email)) {
+                combined.push(tm);
+              }
+            });
+            return combined.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-50);
+          });
+        }
       }
 
       if (!isOpen || activeTab !== 'private' || !activeChat) {
-        const { data: latestPrivate } = await supabase
-          .from('private_messages')
-          .select('sender_email, created_at')
-          .eq('receiver_email', user.email)
-          .order('created_at', { ascending: false })
-          .limit(5);
-
+        const { data: latestPrivate } = await supabase.from('private_messages').select('sender_email, created_at').eq('receiver_email', user.email).order('created_at', { ascending: false }).limit(5);
         if (latestPrivate && latestPrivate.length > 0) {
           let newUnread = false;
           const newSenders = { ...unreadSenders };
-          
           latestPrivate.forEach(msg => {
-            if (msg.created_at > lastReadPrivateRef.current) {
-              if (msg.sender_email !== user.email) {
-                newSenders[msg.sender_email] = true;
-                newUnread = true;
-              }
+            if (msg.created_at > lastReadPrivateRef.current && msg.sender_email !== user.email) {
+              newSenders[msg.sender_email] = true;
+              newUnread = true;
             }
           });
-          
           setHasUnreadPrivate(newUnread);
           setUnreadSenders(newSenders);
         }
@@ -155,6 +162,7 @@ export default function ChatWidget() {
     if (isOpen) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [publicMessages, privateMessages, activeChat, isOpen]);
 
+  // إرسال رسالة (بدون فلتر روابط + إرسال فوري)
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.email) return;
@@ -469,7 +477,7 @@ export default function ChatWidget() {
         onClick={() => { 
           setIsOpen(!isOpen); 
           if (!isOpen && (hasUnreadPrivate || hasNewRequests)) {
-            setActiveTab('private'); // 👈 الذهاب مباشرة للخاص
+            setActiveTab('private');
           }
         }} 
         className={`bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 mr-4 pointer-events-auto relative ${showYellowBadge ? 'animate-pulse' : ''}`}
