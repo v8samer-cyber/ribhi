@@ -3,9 +3,7 @@ import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Swords, Trophy, Timer, Globe, ChevronDown, CheckCircle2, XCircle, Loader2, Search, Info, X } from 'lucide-react';
 
-// 👇 بنك أسئلة ضخم ومتنوع (رياضيات، جغرافيا، علوم، معلومات عامة) 👇
 const QUESTIONS = [
-  // رياضيات
   { q: "5 + 7 = ?", options: ["10", "12", "14"], answer: "12" },
   { q: "9 * 3 = ?", options: ["27", "21", "24"], answer: "27" },
   { q: "15 - 8 = ?", options: ["5", "7", "9"], answer: "7" },
@@ -14,7 +12,6 @@ const QUESTIONS = [
   { q: "2 * 2 * 2 = ?", options: ["6", "8", "10"], answer: "8" },
   { q: "50 - 15 = ?", options: ["30", "35", "40"], answer: "35" },
   { q: "7 * 7 = ?", options: ["42", "49", "56"], answer: "49" },
-  // معلومات عامة وجغرافيا
   { q: "ما هي عاصمة اليابان؟", options: ["بكين", "طوكيو", "سيول"], answer: "طوكيو" },
   { q: "ما هو أكبر كوكب في المجموعة الشمسية؟", options: ["المشتري", "زحل", "الأرض"], answer: "المشتري" },
   { q: "كم عدد أيام الأسبوع؟", options: ["5", "6", "7"], answer: "7" },
@@ -27,7 +24,6 @@ const QUESTIONS = [
   { q: "ما هي عاصمة مصر؟", options: ["الإسكندرية", "القاهرة", "الجيزة"], answer: "القاهرة" },
   { q: "في أي قارة تقع مصر؟", options: ["آسيا", "أفريقيا", "أوروبا"], answer: "أفريقيا" },
   { q: "ما هي عملة اليابان؟", options: ["اليوان", "الين", "الوون"], answer: "الين" },
-  // علوم وطبيعة
   { q: "ما هو الغاز الذي نتنفسه؟", options: ["النيتروجين", "الأكسجين", "ثاني أكسيد الكربون"], answer: "الأكسجين" },
   { q: "ما هي أكبر حيوانات العالم؟", options: ["الفيل", "الحوت الأزرق", "الزرافة"], answer: "الحوت الأزرق" },
   { q: "كم عدد قلوب الأخطبوط؟", options: ["1", "2", "3"], answer: "3" },
@@ -49,10 +45,9 @@ const T = {
     gameSelect: 'Select Game', free: 'Free Play', points: 'Points',
     waiting: 'Searching for a real opponent...', shareCode: 'Room Code:', playing: 'Race to',
     you: 'You', opp: 'Opponent', bet: 'Bet', win: 'You Won! 🎉', lose: 'You Lost 😢', next: 'Next Question', leave: 'Leave Game',
-    confirmLeave: 'Are you sure you want to leave? You will lose the game and the bet.',
+    confirmLeave: 'Are you sure you want to leave? If the game started, you will lose the bet.',
     quizGame: 'Quiz Duel', freeMatch: 'Free Match', searchOpponent: 'Searching...',
-    infoTitle: 'How to Play', infoText: 'Welcome to the Arena!\n\n1. Choose your wager and points to win.\n2. Click "Play Online" to find a random opponent.\n3. Or create a private room and share the code with a friend.\n4. Answer questions faster than your opponent to win the prize!\n5. Warning: If you leave the game, you automatically lose!', close: 'Got it!',
-    oppLeft: 'Opponent left! You win by default.'
+    infoTitle: 'How to Play', infoText: 'Welcome to the Arena!\n\n1. Choose your wager and points to win.\n2. Click "Play Online" to find a random opponent.\n3. Or create a private room and share the code with a friend.\n4. Answer questions faster than your opponent to win the prize!\n5. Warning: If you leave during the game, you automatically lose!', close: 'Got it!'
   },
   ar: {
     back: 'رجوع', title: 'صالة التحدي', sub: 'تحدى أصدقاءك أو لاعبين عبر الإنترنت!',
@@ -62,14 +57,12 @@ const T = {
     gameSelect: 'اختر اللعبة', free: 'لعب مجاني', points: 'نقاط',
     waiting: 'جاري البحث عن خصم حقيقي...', shareCode: 'كود الغرفة:', playing: 'أول من يجمع',
     you: 'أنت', opp: 'الخصم', bet: 'رهان', win: 'أنت الفائز! 🎉', lose: 'للأسف، خسرت 😢', next: 'السؤال التالي', leave: 'مغادرة اللعبة',
-    confirmLeave: 'هل أنت متأكد من المغادرة؟ سوف تخسر اللعبة والرهان.',
+    confirmLeave: 'هل أنت متأكد من المغادرة؟ إذا بدأت اللعبة سوف تخسر الرهان.',
     quizGame: 'تحدي الذكاء', freeMatch: 'مباراة مجانية', searchOpponent: 'جاري البحث...',
-    infoTitle: 'كيف تلعب؟', infoText: 'مرحباً بك في صالة التحدي!\n\n1. اختر مبلغ الرهان وعدد النقاط للفوز.\n2. اضغط "لعب عبر الإنترنت" للبحث عن خصم عشوائي.\n3. أو أنشئ غرفة خاصة وشارك الكود مع صديقك.\n4. أجب على الأسئلة أسرع من خصمك لتربح الجائزة!\n5. تحذير: إذا خرجت من اللعبة، فأنت تخسر تلقائياً!', close: 'فهمت!',
-    oppLeft: 'الخصم غادر اللعبة! أنت الفائز تلقائياً.'
+    infoTitle: 'كيف تلعب؟', infoText: 'مرحباً بك في صالة التحدي!\n\n1. اختر مبلغ الرهان وعدد النقاط للفوز.\n2. اضغط "لعب عبر الإنترنت" للبحث عن خصم عشوائي.\n3. أو أنشئ غرفة خاصة وشارك الكود مع صديقك.\n4. أجب على الأسئلة أسرع من خصمك لتربح الجائزة!\n5. تحذير: إذا خرجت من اللعبة، فأنت تخسر تلقائياً!', close: 'فهمت!'
   }
 };
 
-// 👇 دالة مساعدة لاستخراج اسم المستخدم من الإيميل 👇
 const getUsername = (email: string | undefined) => {
   if (!email) return '...';
   return email.split('@')[0];
@@ -100,6 +93,7 @@ export default function QuizGame() {
   const channelRef = useRef<any>(null);
   const pollIntervalRef = useRef<any>(null);
 
+  // إخفاء الشريط السفلي وأيقونة الدردشة تماماً أثناء اللعب
   useEffect(() => {
     if (inGame) {
       window.scrollTo(0, 0);
@@ -110,7 +104,14 @@ export default function QuizGame() {
       document.body.style.overflow = 'auto';
     }
     const style = document.createElement('style');
-    style.innerHTML = `body.in-game nav, body.in-game .bottom-nav, body.in-game .fixed.bottom-20, body.in-game .fixed.bottom-24 { display: none !important; }`;
+    style.innerHTML = `
+      body.in-game nav, 
+      body.in-game .bottom-nav, 
+      body.in-game .fixed.bottom-20, 
+      body.in-game .fixed.bottom-24 { 
+        display: none !important; 
+      }
+    `;
     document.head.appendChild(style);
     return () => { document.body.classList.remove('in-game'); document.body.style.overflow = 'auto'; document.head.removeChild(style); };
   }, [inGame]);
@@ -184,6 +185,7 @@ export default function QuizGame() {
     setInGame(true);
   };
 
+  // 👇 نظام المزامنة السريع (كل ثانية) 👇
   useEffect(() => {
     if (!inGame || !roomCode) return;
 
@@ -196,10 +198,11 @@ export default function QuizGame() {
     };
     setupChannel();
 
+    // فحص الحالة كل ثانية لضمان دخول اللاعبين معاً
     pollIntervalRef.current = setInterval(async () => {
       const { data } = await supabase.from('game_rooms').select('*').eq('room_code', roomCode).single();
       if (data) setGameRoom((prev: any) => JSON.stringify(prev) !== JSON.stringify(data) ? data : prev);
-    }, 2000);
+    }, 1000);
 
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
@@ -228,13 +231,23 @@ export default function QuizGame() {
     await supabase.from('game_rooms').update({ current_question_index: gameRoom.current_question_index + 1 }).eq('id', gameRoom.id);
   };
 
+  // 👇 دالة المغادرة (تسترجع النقاط إذا كانت اللعبة في الانتظار) 👇
   const handleLeaveGame = async () => {
     if (window.confirm(t.confirmLeave)) {
-      if (inGame && gameRoom?.status === 'playing' && user?.email) {
-        await supabase.rpc('forfeit_game_secure', {
-          p_room_code: gameRoom.room_code,
-          p_leaving_email: user.email
-        });
+      if (inGame && gameRoom && user?.email) {
+        if (gameRoom.status === 'waiting') {
+          // إلغاء البحث واسترجاع النقاط
+          await supabase.rpc('cancel_matchmaking_secure', {
+            p_room_code: gameRoom.room_code,
+            p_player_email: user.email
+          });
+        } else if (gameRoom.status === 'playing') {
+          // انسحاب وخسارة الرهان
+          await supabase.rpc('forfeit_game_secure', {
+            p_room_code: gameRoom.room_code,
+            p_leaving_email: user.email
+          });
+        }
       }
       setInGame(false); setGameRoom(null); setError(''); setIsSearching(false);
       window.location.reload(); 
@@ -246,7 +259,6 @@ export default function QuizGame() {
     const currentQ = QUESTIONS[gameRoom?.current_question_index % QUESTIONS.length];
     const hasRealOpponent = !!gameRoom?.player2_email;
     
-    // 👇 استخراج أسماء اللاعبين 👇
     const myName = getUsername(user?.email);
     const opponentEmail = gameRoom?.player1_email === user?.email ? gameRoom?.player2_email : gameRoom?.player1_email;
     const oppName = getUsername(opponentEmail);
@@ -267,7 +279,6 @@ export default function QuizGame() {
           <div className="w-full max-w-sm">
             <div className="bg-[#161616] p-6 rounded-2xl border border-teal-500/30 shadow-[0_0_50px_rgba(20,184,166,0.2)]">
               
-              {/* 👇 عرض أسماء اللاعبين هنا 👇 */}
               <div className="flex justify-between items-center mb-6 bg-[#0a0a0a] p-3 rounded-xl border border-gray-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                 <div className="text-center w-1/3">
                   <div className="text-[11px] text-teal-300 font-bold mb-1 truncate px-1">{myName} ({mySymbol})</div>
@@ -290,6 +301,7 @@ export default function QuizGame() {
                   <Search className="h-12 w-12 text-teal-400 animate-pulse mx-auto mb-4" />
                   <div className="text-teal-400 text-xl font-bold mb-4 drop-shadow-[0_0_20px_rgba(20,184,166,1)]">{t.waiting}</div>
                   <p className="text-sm text-gray-400">{t.shareCode} <strong className="text-white text-3xl tracking-widest bg-gray-800 px-5 py-2 rounded-xl border border-teal-500/50 mt-4 inline-block shadow-[0_0_20px_rgba(20,184,166,0.5)]">{roomCode}</strong></p>
+                  <p className="text-xs text-gray-500 mt-4">(Leave to cancel and refund points)</p>
                 </div>
               )}
 
