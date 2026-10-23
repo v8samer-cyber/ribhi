@@ -62,6 +62,7 @@ export default function QuizGame() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
 
   const channelRef = useRef<any>(null);
+  const pollIntervalRef = useRef<any>(null);
 
   useEffect(() => {
     const fetchBalance = async () => {
@@ -88,68 +89,25 @@ export default function QuizGame() {
     setIsSearching(true);
     setError('');
 
-    try {
-      const { data, error } = await supabase.rpc('matchmake_secure', {
-        p_player_email: user.email,
-        p_wager: wager,
-        p_target_score: targetScore,
-        p_game_type: selectedGame
-      });
+    const { data, error } = await supabase.rpc('matchmake_secure', {
+      p_player_email: user.email,
+      p_wager: wager,
+      p_target_score: targetScore,
+      p_game_type: selectedGame
+    });
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-
-      setRoomCode(data.room_code);
-      setMySymbol(data.role);
-      
-      const { data: roomData } = await supabase.from('game_rooms').select('*').eq('room_code', data.room_code).single();
-      setGameRoom(roomData);
-      setInGame(true);
-    } catch (err: any) {
-      console.warn("RPC failed, using fallback:", err);
-      await fallbackMatchmaking();
-    } finally {
+    if (error || data.error) {
       setIsSearching(false);
-    }
-  };
-
-  const fallbackMatchmaking = async () => {
-    const { data: availableRooms } = await supabase
-      .from('game_rooms')
-      .select('*')
-      .eq('status', 'waiting')
-      .eq('wager', wager)
-      .eq('target_score', targetScore)
-      .neq('player1_email', user.email)
-      .limit(1);
-
-    if (availableRooms && availableRooms.length > 0) {
-      const room = availableRooms[0];
-      const { error: joinError } = await supabase
-        .from('game_rooms')
-        .update({ player2_email: user.email, status: 'playing' })
-        .eq('id', room.id);
-
-      if (!joinError) {
-        setRoomCode(room.room_code);
-        setMySymbol('O');
-        setGameRoom({ ...room, player2_email: user.email, status: 'playing' });
-        setInGame(true);
-        return;
-      }
+      return setError(error?.message || data.error);
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString(); 
-    const { data: newRoom, error: createError } = await supabase.from('game_rooms').insert([{
-      room_code: code, player1_email: user.email, wager, target_score: targetScore, status: 'waiting'
-    }]).select().single();
-
-    if (createError) return setError(createError.message);
+    setRoomCode(data.room_code);
+    setMySymbol(data.role);
     
-    setGameRoom(newRoom);
-    setMySymbol('X');
-    setRoomCode(code);
+    const { data: roomData } = await supabase.from('game_rooms').select('*').eq('room_code', data.room_code).single();
+    setGameRoom(roomData);
     setInGame(true);
+    setIsSearching(false);
   };
 
   const createRoom = async () => {
@@ -173,46 +131,58 @@ export default function QuizGame() {
   const joinRoom = async () => {
     if (!user?.email || !joinCode) return;
     
-    const { data: roomData, error } = await supabase.from('game_rooms').select('*').eq('room_code', joinCode.toUpperCase()).single();
-    
-    if (error || !roomData) return setError(lang === 'ar' ? 'الغرفة غير موجودة' : 'Room not found');
-    if (roomData.player1_email === user.email) return setError(lang === 'ar' ? 'لا يمكنك اللعب ضد نفسك' : 'Cannot play against yourself');
+    // استخدام الدالة الآمنة للانضمام
+    const { data, error } = await supabase.rpc('join_game_secure', {
+      p_room_code: joinCode.toUpperCase(),
+      p_player_email: user.email
+    });
 
-    const { data, error: updateError } = await supabase.from('game_rooms')
-      .update({ player2_email: user.email, status: 'playing' })
-      .eq('id', roomData.id)
-      .select().single();
+    if (error || data.error) return setError(error?.message || data.error);
 
-    if (updateError) return setError(updateError.message);
+    const { data: roomData } = await supabase.from('game_rooms').select('*').eq('room_code', joinCode.toUpperCase()).single();
     
-    setGameRoom(data);
+    setGameRoom(roomData);
     setMySymbol('O');
     setRoomCode(roomData.room_code);
     setInGame(true);
   };
 
+  // 👇 نظام المزامنة المزدوج (Realtime + Polling) 👇
   useEffect(() => {
     if (!inGame || !roomCode) return;
 
+    // 1. الاستماع اللحظي (Realtime)
     const setupChannel = () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
 
       channelRef.current = supabase.channel(`game_${roomCode}`)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${roomCode}` }, (payload) => {
-          setGameRoom(payload.new);
-        })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${roomCode}` }, (payload) => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${roomCode}` }, (payload) => {
           setGameRoom(payload.new);
         })
         .subscribe((status) => {
           if (status === 'CHANNEL_ERROR') {
-             setTimeout(setupChannel, 2000);
+             setTimeout(setupChannel, 2000); // إعادة محاولة الاتصال
           }
         });
     };
-
     setupChannel();
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
+
+    // 2. نظام التحقق الدوري (Polling) - يضمن تحديث الحالة حتى لو فشل الـ Realtime
+    pollIntervalRef.current = setInterval(async () => {
+      const { data } = await supabase.from('game_rooms').select('*').eq('room_code', roomCode).single();
+      if (data) {
+        setGameRoom((prev: any) => {
+          // تحديث الحالة فقط إذا تغيرت
+          if (JSON.stringify(prev) !== JSON.stringify(data)) return data;
+          return prev;
+        });
+      }
+    }, 2000); // كل ثانيتين
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
   }, [inGame, roomCode]);
 
   useEffect(() => { setHasAnswered(false); setSelectedAnswer(null); }, [gameRoom?.current_question_index]);
