@@ -6,13 +6,12 @@ import SignIn from '@/pages/SignIn';
 import SignUp from '@/pages/SignUp';
 import Earn from '@/pages/Earn';
 import Cashout from '@/pages/Cashout';
-import Leaderboard from '@/pages/Leaderboard';
 import Affiliates from '@/pages/Affiliates';
 import Profile from '@/pages/Profile';
 import TasksHistory from '@/pages/TasksHistory';
 import Admin from '@/pages/Admin';
 import ChatWidget from '@/components/ChatWidget';
-import GamesLobby from '@/pages/GamesLobby'; // 👈 إضافة صفحة الألعاب الجديدة
+import QuizGame from '@/pages/QuizGame'; // 👈 استدعاء صفحة اللعبة مباشرة
 
 function Pages() {
   const { page, user } = useApp();
@@ -23,8 +22,8 @@ function Pages() {
     case 'signup': return <SignUp />;
     case 'earn': return user ? <Earn /> : <SignIn />;
     case 'cashout': return user ? <Cashout /> : <SignIn />;
-    // 👇 غيرنا leaderboard إلى games لكي يفتح صفحة الألعاب
-    case 'games': return user ? <GamesLobby /> : <SignIn />;
+    // 👇 يفتح صفحة التحدي مباشرة
+    case 'games': return user ? <QuizGame /> : <SignIn />; 
     case 'affiliates': return user ? <Affiliates /> : <SignIn />;
     case 'profile': return user ? <Profile /> : <SignIn />;
     case 'tasks': return user ? <TasksHistory /> : <SignIn />;
