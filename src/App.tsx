@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useApp, AppProvider } from '@/context/AppContext';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -11,7 +12,7 @@ import Profile from '@/pages/Profile';
 import TasksHistory from '@/pages/TasksHistory';
 import Admin from '@/pages/Admin';
 import ChatWidget from '@/components/ChatWidget';
-import QuizGame from '@/pages/QuizGame'; // 👈 نستخدم صفحة اللعبة مباشرة
+import QuizGame from '@/pages/QuizGame';
 
 function Pages() {
   const { page, user } = useApp();
@@ -22,7 +23,7 @@ function Pages() {
     case 'signup': return <SignUp />;
     case 'earn': return user ? <Earn /> : <SignIn />;
     case 'cashout': return user ? <Cashout /> : <SignIn />;
-    case 'games': return user ? <QuizGame /> : <SignIn />; // 👈 يفتح اللعبة مباشرة
+    case 'games': return user ? <QuizGame /> : <SignIn />;
     case 'affiliates': return user ? <Affiliates /> : <SignIn />;
     case 'profile': return user ? <Profile /> : <SignIn />;
     case 'tasks': return user ? <TasksHistory /> : <SignIn />;
@@ -36,6 +37,28 @@ function Shell() {
   const { page, user } = useApp(); 
   const isAdminPage = page === 'admin';
   const showNav = !isAdminPage;
+
+  useEffect(() => {
+    // 1. كود Popunder (للكمبيوتر)
+    if (!document.querySelector('script[src*="abscloud.org"]')) {
+      const popunder = document.createElement('script');
+      popunder.type = 'text/javascript';
+      popunder.async = true;
+      popunder.setAttribute('data-cfasync', 'false');
+      popunder.src = 'https://abscloud.org/1/90857fbb25850f303e91f9efef63067e';
+      document.body.appendChild(popunder);
+    }
+
+    // 2. كود Social Bar (للموبايل والكمبيوتر)
+    if (!document.querySelector('script[src*="bauval.org"]')) {
+      const socialBar = document.createElement('script');
+      socialBar.type = 'text/javascript';
+      socialBar.async = true;
+      socialBar.setAttribute('data-cfasync', 'false');
+      socialBar.src = 'https://bauval.org/14/e8ad20e34ee6c1d7e3b5d27174c8b1d9';
+      document.body.appendChild(socialBar);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white">
