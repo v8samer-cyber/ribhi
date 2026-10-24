@@ -169,7 +169,7 @@ export default function Admin() {
           </div>
           <div className="flex justify-between text-sm py-2 border-b border-gray-800">
             <span className="text-gray-400">Balance:</span>
-            <span className="text-orange-500 font-bold">{selectedUser.balance} LE</span>
+            <span className="text-orange-500 font-bold">{selectedUser.balance} IQD</span>
           </div>
           <div className="flex justify-between text-sm py-2">
             <span className="text-gray-400">Joined:</span>
@@ -193,7 +193,7 @@ export default function Admin() {
                     <Calendar size={12} /> {new Date(offer.created_at).toLocaleString()}
                   </p>
                 </div>
-                <span className="font-bold text-orange-500">+{offer.amount} LE</span>
+                <span className="font-bold text-orange-500">+{offer.amount} IQD</span>
               </div>
             ))
           )}
@@ -279,7 +279,7 @@ export default function Admin() {
                         </div>
                       )}
                       <div>
-                        <p className="font-bold text-lg text-white">{w.amount} LE</p>
+                        <p className="font-bold text-lg text-white">{w.amount} IQD</p>
                         <div className="flex items-center gap-2">
                           <p className="text-xs text-gray-400">User ID: {w.user_id.slice(0, 8)}...</p>
                           <button onClick={(e) => { e.stopPropagation(); copyToClipboard(w.user_id); }} className="text-gray-500 hover:text-white">
@@ -392,7 +392,7 @@ export default function Admin() {
                       </p>
                     </div>
                   </div>
-                  <p className="font-bold text-orange-500">{u.balance} LE</p>
+                  <p className="font-bold text-orange-500">{u.balance} IQD</p>
                 </div>
               );
             })}

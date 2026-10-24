@@ -5,14 +5,14 @@ export default function TopBar() {
   
   // هذي هي الأرقام اللي طلبتها (مرتبة)
   const withdrawals = [
-    { name: 'usdt', amount: 'LE 100.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 300.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 500.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 1000.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 2000.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 300.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 800.00', icon: 'B' },
-    { name: 'usdt', amount: 'LE 400.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 100.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 300.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 500.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 1000.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 2000.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 300.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 800.00', icon: 'B' },
+    { name: 'usdt', amount: 'IQD 400.00', icon: 'B' },
   ];
 
   // نكرر المصفوفة عشان الحركة تكون مستمرة
@@ -30,7 +30,7 @@ export default function TopBar() {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-[#1a1a1a] px-3 py-1.5 rounded-lg border border-gray-800">
             <span className="text-yellow-500 text-xs">●</span>
-            <span className="font-bold text-sm">{Number(user?.balance || 0).toFixed(2)} LE</span>
+            <span className="font-bold text-sm">{Number(user?.balance || 0).toFixed(2)} IQD</span>
           </div>
           
           <div className="flex items-center gap-1 bg-[#1a1a1a] px-3 py-1.5 rounded-lg border border-gray-800">

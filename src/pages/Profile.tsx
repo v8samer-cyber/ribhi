@@ -69,7 +69,7 @@ export default function Profile() {
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-600 to-red-600 flex items-center justify-center text-xl font-bold">{getIconLetter(offer.provider)}</div>
                   <div><p className="font-bold text-sm">{offer.provider || 'Offer'}</p><p className="text-xs text-gray-400">{offer.status}</p></div>
                 </div>
-                <div className="flex items-center gap-3"><span className="font-bold text-orange-500">{offer.amount} LE</span>{expandedId === offer.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</div>
+                <div className="flex items-center gap-3"><span className="font-bold text-orange-500">{offer.amount} IQD</span>{expandedId === offer.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</div>
               </div>
               {expandedId === offer.id && (
                 <div className="px-4 pb-4 border-t border-gray-800 pt-3 text-sm">
@@ -94,7 +94,7 @@ export default function Profile() {
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-xl font-bold">B</div>
                   <div><p className="font-bold text-sm">Binance</p><p className="text-xs text-gray-400">Cashout</p></div>
                 </div>
-                <div className="flex items-center gap-3"><span className="font-bold text-orange-500">{w.amount} LE</span>{expandedId === w.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</div>
+                <div className="flex items-center gap-3"><span className="font-bold text-orange-500">{w.amount} IQD</span>{expandedId === w.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</div>
               </div>
               {expandedId === w.id && (
                 <div className="px-4 pb-4 border-t border-gray-800 pt-3 text-sm">

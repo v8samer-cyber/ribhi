@@ -347,7 +347,7 @@ export default function QuizGame() {
                       {gameRoom.wager === 0 ? (
                          <p className="text-teal-400 font-bold text-xl mb-8 drop-shadow-[0_0_10px_rgba(20,184,166,0.5)]">({t.freeMatch})</p>
                       ) : (
-                         <p className="text-green-400 font-bold text-2xl mb-8 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)]">+ {gameRoom.wager} LE</p>
+                         <p className="text-green-400 font-bold text-2xl mb-8 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)]">+ {gameRoom.wager} IQD</p>
                       )}
                     </>
                   ) : (
@@ -357,7 +357,7 @@ export default function QuizGame() {
                       {gameRoom.wager === 0 ? (
                          <p className="text-gray-500 font-bold text-xl mb-8">({t.freeMatch})</p>
                       ) : (
-                         <p className="text-red-500 font-bold text-2xl mb-8 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">- {gameRoom.wager} LE</p>
+                         <p className="text-red-500 font-bold text-2xl mb-8 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">- {gameRoom.wager} IQD</p>
                       )}
                     </>
                   )}
@@ -414,7 +414,7 @@ export default function QuizGame() {
           
           <div className="bg-gray-800/80 p-4 rounded-xl mb-6 text-center border border-gray-700 flex justify-between items-center shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] relative z-10">
             <span className="text-gray-400 text-sm font-medium">{t.balance}:</span>
-            <span className="text-teal-400 font-bold text-2xl drop-shadow-[0_0_15px_rgba(20,184,166,0.8)]">{userBalance} LE</span>
+            <span className="text-teal-400 font-bold text-2xl drop-shadow-[0_0_15px_rgba(20,184,166,0.8)]">{userBalance} IQD</span>
           </div>
 
           {error && <div className="bg-red-500/20 text-red-400 p-3 rounded-lg mb-4 text-sm text-center border border-red-500/50 relative z-10">{error}</div>}

@@ -125,7 +125,7 @@ export default function Earn() {
             
             <h2 className="text-xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-purple-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">Watch & Earn</h2>
             <p className="text-gray-400 text-center text-sm mb-6">
-              Watch short video ads and earn <strong>1 LE</strong> instantly for each complete video.
+              Watch short video ads and earn <strong>1 IQD</strong> instantly for each complete video.
             </p>
 
             <button 
