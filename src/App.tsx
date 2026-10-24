@@ -13,6 +13,8 @@ import TasksHistory from '@/pages/TasksHistory';
 import Admin from '@/pages/Admin';
 import ChatWidget from '@/components/ChatWidget';
 import QuizGame from '@/pages/QuizGame';
+// 👇 1. إضافة استدعاء ملف الإشعارات
+import NotificationHandler from '@/components/NotificationHandler';
 
 function Pages() {
   const { page, user } = useApp();
@@ -68,6 +70,10 @@ function Shell() {
       </main>
       {showNav && <BottomNav />}
       {showNav && user && <ChatWidget />}
+      
+      {/* 👇 2. تفعيل الإشعارات (يظهر فقط للمستخدم المسجل) */}
+      {showNav && user && <NotificationHandler />}
+      
     </div>
   );
 }
