@@ -13,8 +13,8 @@ import TasksHistory from '@/pages/TasksHistory';
 import Admin from '@/pages/Admin';
 import ChatWidget from '@/components/ChatWidget';
 import QuizGame from '@/pages/QuizGame';
-// 👇 1. إضافة استدعاء ملف الإشعارات
 import NotificationHandler from '@/components/NotificationHandler';
+import { supabase } from '@/lib/supabase'; // تأكد من مسار Supabase
 
 function Pages() {
   const { page, user } = useApp();
@@ -40,8 +40,8 @@ function Shell() {
   const isAdminPage = page === 'admin';
   const showNav = !isAdminPage;
 
+  // 1. أكواد الإعلانات الخاصة بك
   useEffect(() => {
-    // 1. كود Popunder (للكمبيوتر)
     if (!document.querySelector('script[src*="abscloud.org"]')) {
       const popunder = document.createElement('script');
       popunder.type = 'text/javascript';
@@ -50,8 +50,6 @@ function Shell() {
       popunder.src = 'https://abscloud.org/1/90857fbb25850f303e91f9efef63067e';
       document.body.appendChild(popunder);
     }
-
-    // 2. كود Social Bar (للموبايل والكمبيوتر)
     if (!document.querySelector('script[src*="bauval.org"]')) {
       const socialBar = document.createElement('script');
       socialBar.type = 'text/javascript';
@@ -62,6 +60,43 @@ function Shell() {
     }
   }, []);
 
+  // 👇 2. كود الطرد التلقائي بعد ساعتين من الخمول 👇
+  useEffect(() => {
+    if (!user) return; // إذا لم يكن هناك مستخدم مسجل، لا تفعل شيئاً
+
+    let timeoutId: NodeJS.Timeout;
+
+    // دالة تسجيل الخروج
+    const handleLogout = async () => {
+      await supabase.auth.signOut();
+      localStorage.removeItem('loot_user'); // تأكد من اسم المتغير الذي تستخدمه
+      localStorage.removeItem('loot_page');
+      window.location.reload(); // إعادة تحميل الصفحة لطرد المستخدم
+    };
+
+    // إعادة ضبط المؤقت (تحدث عند حركة الماوس أو الكتابة)
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      // 2 * 60 * 60 * 1000 تعني ساعتين (يمكنك تغيير 2 إلى 1 لساعة واحدة)
+      timeoutId = setTimeout(handleLogout, 2 * 60 * 60 * 1000); 
+    };
+
+    // الأحداث التي تعني أن المستخدم نشط
+    const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
+    
+    // إضافة المستمعين
+    events.forEach(event => window.addEventListener(event, resetTimer));
+    
+    // بدء المؤقت لأول مرة
+    resetTimer();
+
+    // تنظيف الأحداث عند الخروج
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [user]);
+
   return (
     <div className="min-h-screen bg-black text-white">
       {showNav && <TopBar />}
@@ -70,10 +105,7 @@ function Shell() {
       </main>
       {showNav && <BottomNav />}
       {showNav && user && <ChatWidget />}
-      
-      {/* 👇 2. تفعيل الإشعارات (يظهر فقط للمستخدم المسجل) */}
       {showNav && user && <NotificationHandler />}
-      
     </div>
   );
 }
